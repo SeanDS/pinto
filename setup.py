@@ -12,6 +12,7 @@ def read(path):
 REQUIRES = [
     "beancount",
     "click",
+    "maya",
     "pyyaml",
     "fuzzywuzzy[speedup]",
 ]
@@ -19,17 +20,17 @@ REQUIRES = [
 EXTRAS = {"dev": ["black", "pre-commit", "flake8"]}
 
 CLASSIFIERS = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 3 - Alpha",
     "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
     "Natural Language :: English",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.7",
 ]
 
 setup(
     # Package description.
     name="Pinto",
-    description="Command line interface for managing transactions with Beancount.",
+    description="Command line interface for manual Beancount transaction entry.",
     long_description=read(THIS_DIR / "README.md"),
     long_description_content_type="text/markdown",
     author="Sean Leavey",
@@ -52,5 +53,5 @@ setup(
     license="GPL",
     classifiers=CLASSIFIERS,
     # CLI.
-    entry_points={"console_scripts": ["pinto = pinto.__main__:tools"]},
+    entry_points={"console_scripts": ["pinto = pinto.__main__:pinto"]},
 )

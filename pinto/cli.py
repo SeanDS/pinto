@@ -4,7 +4,7 @@ import sys
 from itertools import zip_longest
 import click
 import maya
-from .tools import get_unique_payee, get_unique_account, DegenerateChoiceException
+from .tools import DegenerateChoiceException
 
 
 def recoverable_error(msg, err=True, **kwargs):
@@ -58,7 +58,7 @@ def get_valid_string(cur, msg, minlen=1, force_once=False, allow_empty=False):
 
 
 def get_valid_payee(
-    payee=None, choices=None, allow_other=True, msg="Enter transaction payee"
+    handler, payee=None, choices=None, allow_other=True, msg="Enter transaction payee"
 ):
     def prompt_numeric_choice_with_user_choice(pchoices, user_choice=None):
         if user_choice is not None:
@@ -75,7 +75,7 @@ def get_valid_payee(
             payee = prompt_numeric_choice_with_user_choice(choices)
         while True:
             try:
-                payee = get_unique_payee(payee)
+                payee = handler.unique_payee(payee)
             except DegenerateChoiceException as e:
                 if payee is not None:
                     recoverable_error("Non-unique or invalid payee.")
@@ -101,7 +101,7 @@ def get_valid_date(date, msg="Enter transaction date"):
         try:
             if dateval is None:
                 dateval = click.prompt(msg, default="today")
-            date = maya.when(dateval).datetime()
+            date = maya.when(dateval).datetime().date()
         except ValueError:
             continue
         else:
@@ -110,7 +110,7 @@ def get_valid_date(date, msg="Enter transaction date"):
 
 
 def get_valid_account(
-    account=None, choices=None, allow_other=True, msg="Enter account"
+    handler, account=None, choices=None, allow_other=True, msg="Enter account"
 ):
     def prompt_numeric_choice_with_other(pchoices):
         otherstr = "Other"
@@ -133,7 +133,7 @@ def get_valid_account(
             account = prompt_numeric_choice_with_other(choices)
         while True:
             try:
-                account = get_unique_account(account)
+                account = handler.unique_account(account)
             except DegenerateChoiceException as e:
                 if account is not None:
                     recoverable_error("Non-unique or invalid account.")

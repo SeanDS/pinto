@@ -1,30 +1,34 @@
 """Script tools."""
 
-import os
-import glob
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 import yaml
 from fuzzywuzzy import process
 from beancount.loader import load_file
-from beancount.core.data import Open
-from .transactions import TransactionFile
+from beancount.core import data
+from beancount.parser import printer
 
-TRANSACTION_FILEDATE_FORMAT = "%Y-%m"
+ACCOUNT_DIR_ENVVAR = "PINTO_DIR"
 TRANSACTION_DATE_FORMAT = "%Y-%m-%d"
-ROOT_DIR = Path(__file__).resolve().parent.parent
-TRANSACTION_DIR = ROOT_DIR / "transactions"
-TEMPLATE_FILE = TRANSACTION_DIR / "templates.yaml"
-ACCOUNT_FILE = ROOT_DIR / "accounts.beancount"
-TRANSACTION_FILE_WILDCARD = TRANSACTION_DIR / "*.beancount"
-TRANSACTION_FILE_BACKUP_DIR = TRANSACTION_DIR / ".backup"
+
+
+def _fuzzy_match(candidates, search_term=None, limit=None):
+    if search_term is None:
+        return [(candidate, 1) for candidate in list(candidates)[:limit]]
+
+    return process.extract(search_term, candidates, limit=limit)
+
+
+def serialise_entry(entry):
+    return printer.format_entry(entry)
+
+
+class TemplateFileNotSet(ValueError):
+    """Template file not set."""
 
 
 class TemplateNotFoundError(ValueError):
-    pass
-
-
-class NoCompatibleTransactionFile(ValueError):
-    pass
+    """Template name not found."""
 
 
 class DegenerateChoiceException(ValueError):
@@ -37,160 +41,180 @@ class DegenerateChoiceException(ValueError):
         return [match for match, _ in self.matches[:count]]
 
 
-def transaction_file_paths(include_meta=False):
-    for path in sorted(glob.glob(str(TRANSACTION_FILE_WILDCARD))):
-        if not include_meta and os.path.basename(path).startswith("0000"):
-            continue
-        yield path
+class AccountHandler:
+    def __init__(self):
+        self._accounts_path = None
 
+    @property
+    def accounts_path(self):
+        return self._accounts_path
 
-def _fuzzy_match(candidates, search_term=None, limit=None):
-    if search_term is None:
-        return [(candidate, 1) for candidate in list(candidates)[:limit]]
+    @accounts_path.setter
+    def accounts_path(self, path):
+        self._accounts_path = Path(path)
 
-    return process.extract(search_term, candidates, limit=limit)
+    @property
+    def accounts_file(self):
+        return self.accounts_path / "main.beancount"
 
+    @property
+    def transactions_file(self):
+        return self.accounts_path / "transactions.beancount"
 
-def all_templates():
-    with open(TEMPLATE_FILE, "r") as templatefile:
-        templates = yaml.safe_load(templatefile)
-    return templates
+    @property
+    def template_path(self):
+        return self.accounts_path / "templates.yaml"
 
+    def transaction_backup_dir(self):
+        return self.accounts_path / ".backup"
 
-def get_templates(search_term=None, templates=None, **kwargs):
-    if templates is None:
-        templates = all_templates().keys()
+    @property
+    def transactions(self):
+        """All transactions found at the account path."""
+        entries, _, _ = load_file(self.accounts_file)
+        yield from data.filter_txns(entries)
 
-    return _fuzzy_match(templates, search_term=search_term, **kwargs)
+    @property
+    def templates(self):
+        if self.template_path is None:
+            raise TemplateFileNotSet
 
+        with self.template_path.open() as templatefile:
+            templates = yaml.safe_load(templatefile)
 
-def get_template(label):
-    templates = all_templates()
-    try:
-        template = templates[label]
-    except KeyError:
-        raise TemplateNotFoundError("Template not found")
-    template["label"] = label
-    return template
+        return templates
 
+    def search_templates(self, search_term=None, templates=None, **kwargs):
+        if templates is None:
+            templates = self.templates.keys()
 
-def has_template(label):
-    try:
-        get_template(label)
-    except ValueError:
-        return False
-    return True
+        return _fuzzy_match(templates, search_term=search_term, **kwargs)
 
+    def get_template(self, label):
+        try:
+            template = self.templates[label]
+        except KeyError as e:
+            raise TemplateNotFoundError("Template not found") from e
 
-def get_payees(search_term=None, payees=None, **kwargs):
-    if payees is None:
-        payees = set(
-            [
-                transaction.payee
-                for transaction in all_transactions()
-                if transaction.payee
-            ]
+        template["label"] = label
+
+        return template
+
+    def has_template(self, label):
+        try:
+            self.get_template(label)
+        except ValueError:
+            return False
+        return True
+
+    def search_payees(self, search_term=None, payees=None, **kwargs):
+        if payees is None:
+            payees = set(
+                [
+                    transaction.payee
+                    for transaction in self.transactions
+                    if transaction.payee
+                ]
+            )
+
+        return _fuzzy_match(payees, search_term=search_term, **kwargs)
+
+    def unique_payee(self, search, **kwargs):
+        matches = list(self.search_payees(search, **kwargs))
+
+        if len(matches) == 1:
+            return matches[0][0]
+
+        # Check if exact match exists.
+        if search is not None:
+            lsearch = search.strip().lower()
+
+            for match in matches:
+                string = match[0]
+
+                if lsearch == string.strip().lower():
+                    return string
+
+        raise DegenerateChoiceException(
+            f"Non-unique payee '{search}'", search=search, matches=matches
         )
 
-    return _fuzzy_match(payees, search_term=search_term, **kwargs)
+    @property
+    def accounts(self):
+        entries, _, _ = load_file(str(self.accounts_file))
 
+        for entry in entries:
+            if not isinstance(entry, data.Open):
+                continue
 
-def get_unique_payee(search, **kwargs):
-    matches = list(get_payees(search, **kwargs))
-    if len(matches) == 1:
-        return matches[0][0]
-    # Check if exact match exists.
-    if search is not None:
-        lsearch = search.strip().lower()
-        for match in matches:
-            string = match[0]
-            if lsearch == string.strip().lower():
-                return string
-    raise DegenerateChoiceException(
-        f"Non-unique payee '{search}'", search=search, matches=matches
-    )
+            yield entry
 
+    def search_accounts(self, search_term=None, accounts=None, **kwargs):
+        if accounts is None:
+            accounts = [account.account for account in self.accounts]
 
-def all_accounts():
-    entries, _, _ = load_file(str(ACCOUNT_FILE))
-    for entry in entries:
-        if not isinstance(entry, Open):
-            continue
-        yield entry
+        return _fuzzy_match(accounts, search_term=search_term, **kwargs)
 
+    def unique_account(self, search, **kwargs):
+        matches = list(self.search_accounts(search, **kwargs))
 
-def get_accounts(search_term=None, accounts=None, **kwargs):
-    if accounts is None:
-        accounts = [account.account for account in all_accounts()]
+        if len(matches) == 1:
+            return matches[0][0]
 
-    return _fuzzy_match(accounts, search_term=search_term, **kwargs)
+        # Check if exact match exists.
+        if search is not None:
+            lsearch = search.strip().lower()
 
+            for match in matches:
+                string = match[0]
 
-def get_unique_account(search, **kwargs):
-    matches = list(get_accounts(search, **kwargs))
-    if len(matches) == 1:
-        return matches[0][0]
-    # Check if exact match exists.
-    if search is not None:
-        lsearch = search.strip().lower()
-        for match in matches:
-            string = match[0]
-            if lsearch == string.strip().lower():
-                return string
-    raise DegenerateChoiceException(
-        f"Non-unique account '{search}'", search=search, matches=matches
-    )
+                if lsearch == string.strip().lower():
+                    return string
 
-
-def get_transaction_files(**kwargs):
-    for path in transaction_file_paths(**kwargs):
-        transactions = TransactionFile(path)
-        transactions.load()
-        yield transactions
-
-
-def get_file_for_transaction(transaction):
-    for transactions in get_transaction_files():
-        if transactions.date_compatible(transaction.date):
-            return transactions
-    raise NoCompatibleTransactionFile("No transaction file compatible.")
-
-
-def align_transaction_files(backup=False, **kwargs):
-    for transactions in get_transaction_files(include_meta=True):
-        if backup:
-            backup_path = TRANSACTION_FILE_BACKUP_DIR / transactions.basename
-            transactions.backup(backup_path)
-        transactions.align(**kwargs)
-
-
-def all_transactions():
-    for tfile in get_transaction_files():
-        yield from tfile.transactions
-
-
-def check_transaction_dates():
-    for transactions in get_transaction_files():
-        transactions.check_date_order()
-
-
-def add_transaction(transaction):
-    try:
-        transactions = get_file_for_transaction(transaction)
-    except NoCompatibleTransactionFile:
-        # Transaction file must be created.
-        transactions = TransactionFile.create_from_date(
-            transaction.date, TRANSACTION_DIR
+        raise DegenerateChoiceException(
+            f"Non-unique account '{search}'", search=search, matches=matches
         )
-    transactions.add(transaction)
 
+    def add_entry(self, transaction):
+        from shutil import copyfile
 
-def match_statement_transaction(stmt_t, flag=None):
-    # Find matching values.
-    for transaction in all_transactions():
-        if flag is not None and transaction.flag != flag:
-            continue
+        insert_lineno = self._new_transaction_lineno(transaction)
+        parent_dir = str(self.transactions_file.resolve().parent)
+        destination = NamedTemporaryFile(mode="w", dir=parent_dir)
 
-        for posting in transaction.postings:
-            if float(posting.units.number) in [stmt_t.debit, stmt_t.credit]:
-                yield transaction
+        with self.transactions_file.open(mode="r") as source:
+            lineno = 1
+
+            while lineno < insert_lineno:
+                destination.file.write(source.readline())
+                lineno += 1
+
+            # Insert the new entry.
+            destination.file.write(serialise_entry(transaction))
+
+            # Write the rest in chunks.
+            while True:
+                data = source.read(1024)
+
+                if not data:
+                    break
+
+                destination.file.write(data)
+
+        # Finish writing data.
+        destination.flush()
+        # Overwrite the transaction file with the new one.
+        copyfile(destination.name, str(self.transactions_file.resolve()))
+        # Delete the temporary file.
+        destination.close()
+
+    def _new_transaction_lineno(self, transaction):
+        """Get the line number at which the specified transaction should go."""
+        for existing_transaction in self.transactions:
+            if existing_transaction.date > transaction.date:
+                return existing_transaction.meta["lineno"]
+
+        # Transaction should go on the last line of the file.
+        last_txn_start = existing_transaction.meta["lineno"]
+        entry = serialise_entry(existing_transaction)
+        return last_txn_start + len(entry.splitlines())

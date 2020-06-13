@@ -6,8 +6,7 @@ Based on core Beancount tools, with small modifications.
 import io
 import re
 
-from beancount.core import amount
-from beancount.core import account
+from beancount.core import amount, account
 
 
 def align_beancount(
