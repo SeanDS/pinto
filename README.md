@@ -57,8 +57,8 @@ called `PINTO_DIR` pointing to the directory containing your accounts.
 ### Adding transactions
 You can start the interactive transaction insertion tool from the command line:
 
-```bash
-pinto add
+```
+$ pinto add
 ```
 
 This will first prompt you for the date:
@@ -154,9 +154,141 @@ transaction file (in date order).
 
 #### Using templates
 Templates can be used to further automate the account entry process. These must be
-defined in a file called `templates.yaml` in the account directory.
+defined in a file called `templates.yaml` in the account directory. The contents of this
+file should be in [YAML](https://yaml.org/) format.
 
-*Example coming soon...*
+Templates support `date`, `payee`, `narration`, and `lines` keys on the top level:
+
+* `date`, `payee` and `narration` simply define the corresponding fields of the
+  transaction. If they are not specified, the user is prompted for them when running
+  `pinto add`.
+* The `lines` key allows a list of lines to be defined, each optionally containing
+  `account`, `splits` and `no_value` keys:
+  * The `account` key defines the name of a single account, or a list of possible
+    accounts. If a list is defined, the user is prompted to choose from the list of
+    possible accounts during `pinto add`.
+  * The `splits` key defines a list of possible split accounts. This provides the
+    ability to define accounts to which the value from the *first* line of the
+    transaction is split into. This might be useful if you share expenses with someone
+    else and wish to split a fraction (e.g. half) of the expense into an asset account
+    representing what that person owes you. This supports `account` and `value` keys:
+      * `account` is the account to split the value with.
+      * `value` is the fraction of the transaction value to split. The resulting value
+        is rounded to the nearest two decimal places.
+  * `no_value` can be set to `true` (it's `false` by default) to define that this line
+    should not prompt the user for a value.
+
+The above definitions are illustrated by the following example showing templates for
+various German supermarkets, a pharmacy (DM) and a DIY shop (Bauhaus). See the notes
+following the example for explanations for what is going on:
+
+```yaml
+denns:
+  payee: &denns "Denn's Biomarkt"
+  lines: &grocery-lines
+    - account: &de-cash-accounts
+      - "Assets:EU:Cash"
+      - "Assets:DE:Deutsche-Bank:Current"
+      splits: &de-partner-split
+        - account: "Assets:DE:Reimbursements:Partner"
+          value: -0.5
+    - account: &de-groceries "Expenses:Food:Groceries"
+      no_value: true
+denns-partner:
+  payee: *denns
+  lines: &de-groceries-partner-liabilities
+    - account: "Liabilities:DE:Partner"
+    - account: "Expenses:Food:Groceries"
+rewe:
+  payee: &rewe "Rewe"
+  lines: *grocery-lines
+rewe-partner:
+  payee: *rewe
+  lines: *de-groceries-partner-liabilities
+edeka:
+  payee: &edeka "Edeka"
+  lines: *grocery-lines
+edeka-partner:
+  payee: *edeka
+  lines: *de-groceries-partner-liabilities
+dm:
+  payee: &dm "DM"
+  lines:
+    - account: *de-cash-accounts
+      splits: *de-partner-split
+    - account: &de-pharmacy-accounts
+      - "Expenses:Toiletries"
+      - "Expenses:Equipment:Kitchen"
+      - "Expenses:Food:Groceries"
+      - "Expenses:Household"
+dm-partner:
+  payee: *dm
+  lines:
+    - account: "Liabilities:DE:Partner"
+    - account: *de-pharmacy-accounts
+bauhaus:
+  payee: &bauhaus "Bauhaus"
+  lines:
+    - account: *de-cash-accounts
+      splits: *de-partner-split
+    - account: &diy-accounts
+      - "Expenses:Equipment"
+      - "Expenses:Household"
+bauhaus-partner:
+  payee: *bauhaus
+  lines:
+    - account: "Liabilities:DE:Partner"
+    - account: *diy-accounts
+```
+
+Some notes:
+
+* The file uses [YAML anchors](https://learnxinyminutes.com/docs/yaml/) to save yet more
+  typing and make future updates easier. These are optional.
+* Each template has a corresponding `-partner` template which is used for when the
+  user's partner spends money in those shops and wishes to split their expenses with
+  you. When entering the transaction they made, you use the `-partner` template instead
+  of the normal one which you would use if you had made the transaction. These
+  `-partner` templates define the liability account to use the define the money that you
+  owe them.
+* Some shops such as the pharmacy DM sell goods that would go into many different
+  accounts in the example user's setup. In this case, the accounts key defines a list
+  of possible accounts, and the user is prompted to choose one for the particular line
+  they enter.
+* The `value` key in the `splits` section should in the case of liabilities be a
+  negative number so that the split fraction of the *negative* expense becomes a
+  *positive* asset.
+
+Templates can be used by specifying either `-t` or `--template` followed by the name
+of the template to use when running `pinto add`. For example:
+
+```
+$ pinto add -t bauhaus
+Enter transaction date [today]:
+Date will be 2020-06-14
+Payee will be Bauhaus
+Enter transaction narration []: Wood for side wall
+Narration will be Wood for side wall
+Adding line 1 of 2...
+Choose account ([1] Assets:EU:Cash, [2] Assets:DE:Deutsche-Bank:Current, [3] Other): 1
+Account will be Assets:EU:Cash
+Enter value []: -10 EUR
+Value will be -10.00 EUR
+Adding line 2 of 2...
+Choose account ([1] Expenses:Equipment, [2] Expenses:Household, [3] Other): 2
+Account will be Expenses:Household
+Enter value []:
+Value will be empty
+Draft transaction:
+2020-06-14 * "Bauhaus" "Wood for side wall"
+  Assets:EU:Cash      -10 EUR
+  Expenses:Household
+
+Commit? [y/N]: y
+Committed!
+```
+
+Templates can be searched by name using `pinto search templates`.
 
 ## Installation
 With Python 3 as the default Python interpreter, run:
