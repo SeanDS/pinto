@@ -1,4 +1,8 @@
 # Pinto
+![Pinto on PyPI](https://img.shields.io/pypi/v/pinto.svg "Pinto on PyPI")
+![Python versions](https://img.shields.io/pypi/pyversions/pinto.svg "Python versions")
+![Code style uses Black](https://img.shields.io/badge/code%20style-black-000000.svg "Code style uses Black")
+
 Supercharged command line interface for [Beancount](http://furius.ca/beancount/).
 
 While Beancount provides a few basic utilities for creating transactions via importers
@@ -299,6 +303,14 @@ pip install pinto
 
 ## Usage
 From a terminal, run `pinto` for available options.
+
+## Feature ideas
+I would eventually like to:
+
+* Automatically insert transactions imported from e.g. credit card statements into
+  accounts.
+* Allow scheduled transactions to be defined, such as monthly phone bills, which would
+  be inserted automatically when running a special command.
 
 ## Development
 The developer warmly encourages collaboration. Please submit feature requests, bug
