@@ -178,7 +178,7 @@ def pinto(ctx):
 )
 @click.pass_context
 def add(ctx, template, date, payee, narration, tag, split, dry_run):
-    """Add transaction"""
+    """Add new transaction."""
     handler = ctx.ensure_object(AccountHandler)
 
     if template is not None:
@@ -264,7 +264,13 @@ def add(ctx, template, date, payee, narration, tag, split, dry_run):
         exit_error("The transaction did not proceed.")
 
 
-@pinto.command()
+@pinto.group()
+def search():
+    """Search account files."""
+    pass
+
+
+@search.command()
 @click.argument("search", type=str)
 @click.option(
     "-n", type=int, default=5, help="Maximum number of partial matches to return."
@@ -289,7 +295,7 @@ def templates(ctx, search, n):
         click.secho(template, fg="green")
 
 
-@pinto.command()
+@search.command()
 @click.argument("search", type=str)
 @click.option(
     "-n", type=int, default=5, help="Maximum number of partial matches to return."
@@ -307,7 +313,7 @@ def accounts(ctx, search, n):
         click.secho(account, fg="green")
 
 
-@pinto.command()
+@search.command()
 @click.argument("search", type=str)
 @click.option(
     "-n", type=int, default=5, help="Maximum number of partial matches to return."
@@ -325,32 +331,67 @@ def payees(ctx, search, n):
         click.secho(payee, fg="green")
 
 
-@pinto.command()
-@click.option("-p", "--prefix-width", default=4, help="Use this prefix width.")
+@pinto.group()
+def format():
+    """Format account files."""
+    pass
+
+
+@format.command()
 @click.option(
-    "-c", "--currency-column", default=90, help="Align currencies in this column."
+    "-p", "--prefix-width", default=4, show_default=True, help="Use this prefix width."
+)
+@click.option(
+    "-c",
+    "--currency-column",
+    default=90,
+    show_default=True,
+    help="Align currencies in this column.",
 )
 @click.option(
     "--backup/--no-backup",
     is_flag=True,
     default=True,
+    show_default=True,
     help="Backup transactions before formatting.",
 )
 @click.pass_context
-def format(ctx, prefix_width, currency_column, backup):
-    """Format transaction files."""
+def transactions(ctx, prefix_width, currency_column, backup):
+    """Format transaction file."""
     handler = ctx.ensure_object(AccountHandler)
-    handler.align_transaction_files(
+    handler.format_transactions(
         prefix_width=prefix_width, currency_column=currency_column, backup=backup,
     )
 
 
-@pinto.command()
+@pinto.group()
+def check():
+    """Check account files for various issues."""
+    pass
+
+
+@check.command()
 @click.pass_context
-def check_dates(ctx):
-    """Check transaction dates are ordered and in the correct file."""
+def syntax(ctx):
+    """Check account syntax is correct."""
     handler = ctx.ensure_object(AccountHandler)
-    handler.check_transaction_dates(handler)
+
+    try:
+        handler.check_syntax()
+    except ValueError as e:
+        exit_error(str(e))
+
+
+@check.command()
+@click.pass_context
+def transaction_dates(ctx):
+    """Check transactions are correctly ordered by date."""
+    handler = ctx.ensure_object(AccountHandler)
+
+    try:
+        handler.check_date_order()
+    except ValueError as e:
+        exit_error(str(e))
 
 
 if __name__ == "__main__":

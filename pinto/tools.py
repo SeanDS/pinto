@@ -62,11 +62,14 @@ class AccountHandler:
         return self.accounts_path / "transactions.beancount"
 
     @property
+    def transaction_backup_file(self):
+        return self.transactions_file.with_suffix(
+            self.transactions_file.suffix + ".backup"
+        )
+
+    @property
     def template_path(self):
         return self.accounts_path / "templates.yaml"
-
-    def transaction_backup_dir(self):
-        return self.accounts_path / ".backup"
 
     @property
     def transactions(self):
@@ -218,3 +221,51 @@ class AccountHandler:
         last_txn_start = existing_transaction.meta["lineno"]
         entry = serialise_entry(existing_transaction)
         return last_txn_start + len(entry.splitlines())
+
+    def check_syntax(self):
+        """Check the syntax of the account file."""
+        from beancount import loader
+        from beancount.ops import validation
+
+        _, errors, _ = loader.load_file(
+            str(self.accounts_file),
+            # Force slow and hardcore validations, just for check.
+            extra_validations=validation.HARDCORE_VALIDATIONS,
+        )
+
+        if errors:
+            errorlist = [printer.format_error(error).strip() for error in errors]
+            raise ValueError("\n".join(errorlist))
+
+    def check_date_order(self):
+        """Check the transactions are correctly ordered by date."""
+        errors = []
+        last_lineno = None
+        last_date = None
+
+        for transaction in self.transactions:
+            lineno = transaction.meta["lineno"]
+            date = transaction.date
+
+            if last_lineno is not None and lineno < last_lineno:
+                errors.append(
+                    f"Entry on line {lineno} of {self.transactions_file!s}: "
+                    f"{date} < {last_date}"
+                )
+
+            last_lineno = lineno
+            last_date = date
+
+        if errors:
+            raise ValueError("\n".join(errors))
+
+    def format_transactions(self, backup=True, **kwargs):
+        from beancount.scripts.format import align_beancount
+
+        original = self.transactions_file.read_text()
+        new = align_beancount(original, **kwargs)
+
+        if backup:
+            self.transaction_backup_file.write_text(original)
+
+        self.transactions_file.write_text(new)
