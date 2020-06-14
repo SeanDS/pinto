@@ -33,6 +33,25 @@ Other tools added to the `pinto` command are:
   (using the environment variable the same way as `format`) and the date ordering of
   your transactions.
 
+## Expected account layout
+Pinto expects your accounts directory to be arranged like this:
+
+```
+.
+├── main.beancount
+├── templates.yaml
+└── transactions.beancount
+```
+
+The `main.beancount` file should use the `include` command to include the contents of
+`transactions.beancount`.
+
+The `templates.yaml` file is where you can specify templates for commonly used
+transactions, useful for `pinto add`.
+
+To avoid excessive typing, you should define an environment variable in your shell
+called `PINTO_DIR` pointing to the directory containing your accounts.
+
 ## Examples
 
 ### Adding transactions
