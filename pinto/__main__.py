@@ -2,6 +2,7 @@
 
 import click
 from beancount.core.data import Transaction, new_metadata, create_simple_posting
+from . import __version__, PROGRAM
 from .cli import (
     exit_error,
     echo_info,
@@ -153,6 +154,7 @@ def set_template_path(ctx, _, value):
         f"{ACCOUNT_DIR_ENVVAR} is searched."
     ),
 )
+@click.version_option(version=__version__, prog_name=PROGRAM)
 @click.pass_context
 def pinto(ctx):
     handler = ctx.ensure_object(AccountHandler)

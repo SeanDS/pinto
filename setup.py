@@ -3,10 +3,7 @@ from pathlib import Path
 from setuptools import setup, find_packages
 
 THIS_DIR = Path(__file__).resolve().parent
-
-
-def read(path):
-    return path.open().read()
+README = THIS_DIR / "README.md"
 
 
 REQUIRES = [
@@ -17,7 +14,7 @@ REQUIRES = [
     "fuzzywuzzy[speedup]",
 ]
 
-EXTRAS = {"dev": ["black", "pre-commit", "flake8"]}
+EXTRAS = {"dev": ["black", "pre-commit", "flake8", "readme-renderer"]}
 
 CLASSIFIERS = [
     "Development Status :: 3 - Alpha",
@@ -29,9 +26,9 @@ CLASSIFIERS = [
 
 setup(
     # Package description.
-    name="Pinto",
-    description="Command line interface for manual Beancount transaction entry.",
-    long_description=read(THIS_DIR / "README.md"),
+    name="pinto",
+    description="Supercharged command line interface for Beancount.",
+    long_description=README.read_text(),
     long_description_content_type="text/markdown",
     author="Sean Leavey",
     author_email="github@attackllama.com",
