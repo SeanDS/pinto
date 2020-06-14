@@ -40,9 +40,6 @@ setup(
     # Packages.
     packages=find_packages(),
     zip_safe=False,
-    package_data={
-        "finesse": ["plotting/style/*.mplstyle", "cmath/*.pxd", "simulations/*.pxd"]
-    },
     # Requirements.
     python_requires=">=3.6",
     install_requires=REQUIRES,
