@@ -142,7 +142,7 @@ def set_template_path(ctx, _, value):
     handler.template_path = value
 
 
-@click.group(help="Beancount tools.")
+@click.group(name="pinto", help="Beancount tools.")
 @click.option(
     "--accounts",
     type=click.Path(exists=True, dir_okay=True, file_okay=False, writable=True),
@@ -166,7 +166,7 @@ def pinto(ctx):
         )
 
 
-@pinto.command()
+@pinto.command(name="add")
 @click.option("-t", "--template", type=str, help="Transaction template.")
 @click.option("-d", "--date", type=str, help="Transaction date.")
 @click.option(
@@ -179,7 +179,7 @@ def pinto(ctx):
     "--dry-run", is_flag=True, default=False, help="Make no changes to files."
 )
 @click.pass_context
-def add(ctx, template, date, payee, narration, tag, split, dry_run):
+def add_transaction(ctx, template, date, payee, narration, tag, split, dry_run):
     """Add new transaction."""
     handler = ctx.ensure_object(AccountHandler)
 
@@ -266,19 +266,19 @@ def add(ctx, template, date, payee, narration, tag, split, dry_run):
         exit_error("The transaction did not proceed.")
 
 
-@pinto.group()
+@pinto.group(name="search")
 def search():
     """Search account files."""
     pass
 
 
-@search.command()
+@search.command(name="templates")
 @click.argument("search", type=str)
 @click.option(
     "-n", type=int, default=5, help="Maximum number of partial matches to return."
 )
 @click.pass_context
-def templates(ctx, search, n):
+def search_templates(ctx, search, n):
     """Search templates.
 
     Partial matches are made automatically. The search term is case-insensitive.
@@ -297,13 +297,13 @@ def templates(ctx, search, n):
         click.secho(template, fg="green")
 
 
-@search.command()
+@search.command(name="accounts")
 @click.argument("search", type=str)
 @click.option(
     "-n", type=int, default=5, help="Maximum number of partial matches to return."
 )
 @click.pass_context
-def accounts(ctx, search, n):
+def search_accounts(ctx, search, n):
     """Search accounts.
 
     Partial matches are made automatically. The search term is case-insensitive.
@@ -315,13 +315,13 @@ def accounts(ctx, search, n):
         click.secho(account, fg="green")
 
 
-@search.command()
+@search.command(name="payees")
 @click.argument("search", type=str)
 @click.option(
     "-n", type=int, default=5, help="Maximum number of partial matches to return."
 )
 @click.pass_context
-def payees(ctx, search, n):
+def search_payees(ctx, search, n):
     """Search payees.
 
     Partial matches are made automatically. The search term is case-insensitive.
@@ -333,13 +333,13 @@ def payees(ctx, search, n):
         click.secho(payee, fg="green")
 
 
-@pinto.group()
+@pinto.group(name="format")
 def format():
     """Format account files."""
     pass
 
 
-@format.command()
+@format.command(name="transactions")
 @click.option(
     "-p", "--prefix-width", default=4, show_default=True, help="Use this prefix width."
 )
@@ -358,7 +358,7 @@ def format():
     help="Backup transactions before formatting.",
 )
 @click.pass_context
-def transactions(ctx, prefix_width, currency_column, backup):
+def format_transactions(ctx, prefix_width, currency_column, backup):
     """Format transaction file."""
     handler = ctx.ensure_object(AccountHandler)
     handler.format_transactions(
@@ -366,15 +366,15 @@ def transactions(ctx, prefix_width, currency_column, backup):
     )
 
 
-@pinto.group()
+@pinto.group(name="check")
 def check():
     """Check account files for various issues."""
     pass
 
 
-@check.command()
+@check.command(name="syntax")
 @click.pass_context
-def syntax(ctx):
+def check_syntax(ctx):
     """Check account syntax is correct."""
     handler = ctx.ensure_object(AccountHandler)
 
@@ -384,9 +384,9 @@ def syntax(ctx):
         exit_error(str(e))
 
 
-@check.command()
+@check.command(name="transaction-dates")
 @click.pass_context
-def transaction_dates(ctx):
+def check_transaction_dates(ctx):
     """Check transactions are correctly ordered by date."""
     handler = ctx.ensure_object(AccountHandler)
 
