@@ -44,7 +44,7 @@ setup(
         "finesse": ["plotting/style/*.mplstyle", "cmath/*.pxd", "simulations/*.pxd"]
     },
     # Requirements.
-    python_requires=">=3.7",
+    python_requires=">=3.6",
     install_requires=REQUIRES,
     setup_requires=["setuptools_scm"],
     extras_require=EXTRAS,
