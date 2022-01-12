@@ -10,6 +10,7 @@ from beancount.parser import printer
 
 ACCOUNT_DIR_ENVVAR = "PINTO_DIR"
 TRANSACTION_DATE_FORMAT = "%Y-%m-%d"
+TRANSACTION_DATE_LONG_FORMAT = "%a %d %b %Y"
 
 
 def _fuzzy_match(candidates, search_term=None, limit=None):
@@ -70,6 +71,10 @@ class AccountHandler:
     @property
     def template_path(self):
         return self.accounts_path / "templates.yaml"
+
+    @property
+    def importers_config_path(self):
+        return self.accounts_path / "importers.py"
 
     @property
     def transactions(self):
@@ -269,3 +274,21 @@ class AccountHandler:
             self.transaction_backup_file.write_text(original)
 
         self.transactions_file.write_text(new)
+
+    def ingest_transactions(self, path):
+        """Ingest the transactions from the specified path."""
+        from runpy import run_path
+        from beancount.ingest.identify import find_imports
+        from beancount.ingest.extract import extract_from_file
+
+        # Run the config file and use its config setting to get the importer.
+        mod = run_path(self.importers_config_path)
+        _, importers = next(find_imports(mod["CONFIG"], path))
+
+        if len(importers) != 1:
+            raise ValueError(
+                f"Don't know how to handle '{path}' that can be imported by multiple "
+                f"importers"
+            )
+
+        return extract_from_file(path, importers.pop())

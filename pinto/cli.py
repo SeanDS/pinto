@@ -35,6 +35,17 @@ def echo_warning(msg=None, **kwargs):
     click.secho(msg, fg="yellow", **kwargs)
 
 
+def echo_warning_params(msg, params, **kwargs):
+    """Echo warning with parameters made bold."""
+    pieces = msg.split("{}")
+    for piece, param in zip_longest(pieces, params):
+        if piece is not None:
+            echo_warning(str(piece), nl=False)
+        if param is not None:
+            echo_warning(str(param), nl=False, bold=True)
+    echo_warning()
+
+
 def get_valid_string(cur, msg, minlen=1, force_once=False, allow_empty=False):
     def validate(string):
         if string is None or string == "":
@@ -57,44 +68,6 @@ def get_valid_string(cur, msg, minlen=1, force_once=False, allow_empty=False):
     return cur
 
 
-def get_valid_payee(
-    handler, payee=None, choices=None, allow_other=True, msg="Enter transaction payee"
-):
-    def prompt_numeric_choice_with_user_choice(pchoices, user_choice=None):
-        if user_choice is not None:
-            pchoices.insert(0, user_choice)
-
-        if len(pchoices) == 1:
-            choice = pchoices[0]
-        else:
-            choice = prompt_numeric_choice(msg, pchoices)
-        return choice
-
-    while True:
-        if choices is not None:
-            payee = prompt_numeric_choice_with_user_choice(choices)
-        while True:
-            try:
-                payee = handler.unique_payee(payee)
-            except DegenerateChoiceException as e:
-                if payee is not None:
-                    recoverable_error("Non-unique or invalid payee.")
-                    user_payee = payee
-                    payee = prompt_numeric_choice_with_user_choice(
-                        e.closest_matches(4), user_payee
-                    )
-
-                    if payee == user_payee:
-                        return user_payee
-                else:
-                    payee = click.prompt(msg, type=str)
-            else:
-                break
-        break
-
-    return payee
-
-
 def get_valid_date(date, msg="Enter transaction date"):
     dateval = date
     while True:
@@ -109,42 +82,91 @@ def get_valid_date(date, msg="Enter transaction date"):
     return date
 
 
-def get_valid_account(
-    handler, account=None, choices=None, allow_other=True, msg="Enter account"
+def _prompt_numeric_choice_with_other(pchoices, msg, allow_other=True):
+    otherstr = "Other"
+    if pchoices is not None and allow_other:
+        if otherstr in pchoices:
+            raise Exception(f"Choice value cannot be '{otherstr}' (used internally)")
+        pchoices.append(otherstr)
+    if len(pchoices) == 1:
+        naccount = pchoices[0]
+    else:
+        naccount = prompt_numeric_choice(msg, pchoices)
+    if allow_other and naccount == otherstr:
+        naccount = click.prompt(msg, type=str)
+    return naccount
+
+
+def ____get_valid_payee(
+    handler, choices=None, allow_other=True, msg="Enter transaction payee"
 ):
-    def prompt_numeric_choice_with_other(pchoices):
-        otherstr = "Other"
-        if pchoices is not None and allow_other:
-            if otherstr in pchoices:
-                raise Exception(
-                    f"Choice value cannot be '{otherstr}' (used internally)"
-                )
-            pchoices.append(otherstr)
-        if len(pchoices) == 1:
-            naccount = pchoices[0]
-        else:
-            naccount = prompt_numeric_choice(msg, pchoices)
-        if allow_other and naccount == otherstr:
-            naccount = click.prompt(msg, type=str)
-        return naccount
+    payee = None
 
     while True:
         if choices is not None:
-            account = prompt_numeric_choice_with_other(choices)
+            payee = _prompt_numeric_choice_with_other(choices, allow_other=allow_other)
         while True:
             try:
-                account = handler.unique_account(account)
+                payee = handler.unique_payee(payee)
             except DegenerateChoiceException as e:
-                if account is not None:
-                    recoverable_error("Non-unique or invalid account.")
-                    account = prompt_numeric_choice_with_other(e.closest_matches())
+                if payee is not None:
+                    recoverable_error("Non-unique or invalid payee.")
+                    user_payee = payee
+                    payee = _prompt_numeric_choice_with_other(
+                        e.closest_matches(4), user_payee, allow_other=allow_other
+                    )
+
+                    if payee == user_payee:
+                        return user_payee
                 else:
-                    account = click.prompt(msg, type=str)
+                    payee = click.prompt(msg, type=str)
             else:
                 break
         break
 
-    return account
+    return payee
+
+
+def prompt_choice(
+    choice=None,
+    choices=None,
+    allow_other=True,
+    msg="Enter choice",
+    error_msg="Invalid choice.",
+    validator=None,
+):
+    """Prompt user for a choice.
+
+    `validator` may be a callable that validates the user choice. If the validator
+    raises a `DegenerateChoiceException`, the user is shown `error_msg` and prompted
+    for another input.
+    """
+
+    if validator is None:
+        # Default to identity function.
+        validator = lambda _: _
+
+    while True:
+        if choices is not None:
+            choice = _prompt_numeric_choice_with_other(
+                choices, msg, allow_other=allow_other
+            )
+        while True:
+            try:
+                choice = validator(choice)
+            except DegenerateChoiceException as e:
+                if choice is not None:
+                    recoverable_error(error_msg)
+                    choice = _prompt_numeric_choice_with_other(
+                        e.closest_matches(), msg, allow_other=allow_other
+                    )
+                else:
+                    choice = click.prompt(msg, type=str)
+            else:
+                break
+        break
+
+    return choice
 
 
 def prompt_numeric_choice(msg, choices, **kwargs):
@@ -183,7 +205,7 @@ def get_valid_fraction(fraction, msg, **kwargs):
     while True:
         try:
             fraction = float(fraction)
-        except ValueError:
+        except (ValueError, TypeError):
             fraction = click.prompt(msg, **kwargs)
         else:
             break

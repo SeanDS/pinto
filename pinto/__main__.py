@@ -8,16 +8,17 @@ from .cli import (
     echo_info,
     echo_info_params,
     echo_warning,
+    echo_warning_params,
     get_valid_string,
     get_valid_date,
-    get_valid_payee,
-    get_valid_account,
+    prompt_choice,
     get_valid_payment,
     get_valid_fraction,
 )
 from .tools import (
     ACCOUNT_DIR_ENVVAR,
     TRANSACTION_DATE_FORMAT,
+    TRANSACTION_DATE_LONG_FORMAT,
     AccountHandler,
     TemplateNotFoundError,
     TemplateFileNotSet,
@@ -25,7 +26,7 @@ from .tools import (
 )
 
 
-def add_linedata(
+def _add_linedata(
     handler,
     transaction,
     account=None,
@@ -35,9 +36,7 @@ def add_linedata(
     do_split=False,
 ):
     """Validate/prompt user for linedata."""
-    taccount = _get_valid_account_list_or_string(
-        handler, account, allow_other=True, msg="Choose account"
-    )
+    taccount = _prompt_account(handler, account, allow_other=True)
     echo_info_params("Account will be {}", [taccount])
 
     # Get posting value.
@@ -51,14 +50,20 @@ def add_linedata(
         tvalue = None
         tcurrency = None
 
-    if tvalue is not None:
-        echo_info_params("Value will be {} {}", [f"{tvalue:.2f}", tcurrency])
+    # Create a copy that we format as a value.
+    trvalue = tvalue
+
+    if trvalue is not None:
+        # Convert value to rounded string.
+        trvalue = f"{round(tvalue, 2):.2f}"
+
+        echo_info_params("Value will be {} {}", [trvalue, tcurrency])
     else:
         echo_info("Value will be empty")
 
     # Add line.
     create_simple_posting(
-        transaction, account=taccount, number=tvalue, currency=tcurrency
+        transaction, account=taccount, number=trvalue, currency=tcurrency
     )
 
     # Get splits.
@@ -66,7 +71,7 @@ def add_linedata(
         if splits is not None:
             # Splits defined by template.
             for _, split in enumerate(splits, start=1):
-                add_splitdata(
+                _add_splitdata(
                     handler, transaction, taccount, tvalue, tcurrency, **split
                 )
         else:
@@ -75,56 +80,72 @@ def add_linedata(
 
             while splitting:
                 echo_info_params("Adding split {}...", [splitno])
-                add_splitdata(handler, transaction, taccount, tvalue, tcurrency)
+                _add_splitdata(handler, transaction, taccount, tvalue, tcurrency)
                 splitting = click.confirm("Add another split?", default=False)
                 splitno += 1
 
 
-def add_splitdata(
+def _add_splitdata(
     handler, transaction, taccount, tvalue, tcurrency, account=None, value=-0.5
 ):
-    saccount = _get_valid_account_list_or_string(
+    saccount = _prompt_account(
         handler, account, msg=f"Choose split account for {taccount}"
     )
     echo_info_params("Split account will be {}", [saccount])
     fraction = get_valid_fraction(None, msg="Choose split fraction", default=value)
     svalue = tvalue * fraction
+    # Convert values to rounded strings.
     trvalue = f"{round(tvalue, 2):.2f}"
     srvalue = f"{round(svalue, 2):.2f}"
 
     if svalue != 0:
         echo_info_params(
-            f"{trvalue} {tcurrency} will be split into {saccount} with value "
-            f"{srvalue} {tcurrency}"
+            "{} {} will be split into {} with value {} {}",
+            [trvalue, tcurrency, saccount, srvalue, tcurrency],
         )
 
         # Add line.
         create_simple_posting(
-            transaction, account=saccount, number=svalue, currency=tcurrency
+            transaction, account=saccount, number=srvalue, currency=tcurrency
         )
     else:
         echo_info("Zero value split ignored")
 
 
-def _get_valid_account_list_or_string(handler, account_or_choices, **kwargs):
-    """Deal with accounts defined either as strings or list of strings in YAML."""
-    # Get account.
-    account = None
-    choices = None
-    if account_or_choices is not None:
-        if isinstance(account_or_choices, str):
-            account_or_choices = [account_or_choices]
-        try:
-            choices = list(account_or_choices)
-        except TypeError:
-            raise ValueError("account must be string or iterable")
-        if len(choices) == 1:
-            account = choices[0]
-            choices = None
-    return get_valid_account(handler, account=account, choices=choices, **kwargs)
+def _ensure_list(item):
+    """Ensure `item` is a list. If it's a string, it's converted into a 1-item list."""
+    if item is None:
+        item = []
+    elif isinstance(item, str):
+        item = [item]
+    return list(item)
 
 
-def set_account_path(ctx, _, value):
+def _prompt_account(handler, choices, msg="Enter account", **kwargs):
+    """Prompt user for a choice of account, where `choices` can be a single string or
+    list of strings."""
+    return prompt_choice(
+        choices=_ensure_list(choices),
+        msg=msg,
+        error_msg="Non-unique or invalid account.",
+        validator=handler.unique_account,
+        **kwargs,
+    )
+
+
+def _prompt_payee(
+    handler,
+    msg="Enter transaction payee",
+    error_msg="Non-unique or invalid payee.",
+    **kwargs,
+):
+    """Prompt user for a choice of payee."""
+    return prompt_choice(
+        msg=msg, error_msg=error_msg, validator=handler.unique_payee, **kwargs
+    )
+
+
+def _set_account_path(ctx, _, value):
     handler = ctx.ensure_object(AccountHandler)
 
     if value is None:
@@ -136,18 +157,12 @@ def set_account_path(ctx, _, value):
     handler.accounts_path = value
 
 
-def set_template_path(ctx, _, value):
-    """Set account for this session."""
-    handler = ctx.ensure_object(AccountHandler)
-    handler.template_path = value
-
-
 @click.group(name="pinto", help="Beancount tools.")
 @click.option(
     "--accounts",
     type=click.Path(exists=True, dir_okay=True, file_okay=False, writable=True),
     envvar=ACCOUNT_DIR_ENVVAR,
-    callback=set_account_path,
+    callback=_set_account_path,
     expose_value=False,
     help=(
         f"Accounts directory. If not specified, the environment variable "
@@ -176,10 +191,19 @@ def pinto(ctx):
 @click.option("--tag", type=str, help="Transaction tag.")
 @click.option("--split/--no-split", is_flag=True, default=False, help="Offer splits.")
 @click.option(
+    "-f",
+    "--force-prompts",
+    is_flag=True,
+    default=False,
+    help="Force prompts for transaction details, even if the template specifies them.",
+)
+@click.option(
     "--dry-run", is_flag=True, default=False, help="Make no changes to files."
 )
 @click.pass_context
-def add_transaction(ctx, template, date, payee, narration, tag, split, dry_run):
+def add_transaction(
+    ctx, template, date, payee, narration, tag, split, force_prompts, dry_run
+):
     """Add new transaction."""
     handler = ctx.ensure_object(AccountHandler)
 
@@ -195,19 +219,42 @@ def add_transaction(ctx, template, date, payee, narration, tag, split, dry_run):
         echo_warning("This will be a dry run")
 
     ## Get/validate transaction parameters.
+
     # Date.
     tdate = get_valid_date(template.get("date", date))
     echo_info_params(
-        "Date will be {}", [tdate.strftime(TRANSACTION_DATE_FORMAT)], nl=False
+        "Date will be {} ({})",
+        [
+            tdate.strftime(TRANSACTION_DATE_FORMAT),
+            tdate.strftime(TRANSACTION_DATE_LONG_FORMAT),
+        ],
+        nl=False,
     )
+
     # Payee.
-    tpayee = get_valid_payee(
-        handler, template.get("payee", payee), msg="Enter transaction payee"
-    )
+    template_payees = _ensure_list(template.get("payee"))
+    if payee:
+        if force_prompts:
+            tpayee = _prompt_payee(
+                handler, choices=template_payees, existing_choice=payee
+            )
+        else:
+            # Use the payee passed as an option.
+            tpayee = payee
+
+            if template_payees:
+                echo_warning_params(
+                    "Ignoring {} template payee(s) and instead using {}",
+                    [len(template_payees), payee],
+                )
+    else:
+        tpayee = _prompt_payee(handler, choices=template_payees)
+
     if tpayee:
         echo_info_params("Payee will be {}", [tpayee])
     else:
         echo_info("No payee")
+
     # Narration.
     tnarration = get_valid_string(
         template.get("narration", narration),
@@ -216,11 +263,13 @@ def add_transaction(ctx, template, date, payee, narration, tag, split, dry_run):
         force_once="narration" not in template,
         allow_empty=True,
     )
+
     if tnarration:
         echo_info_params("Narration will be {}", [tnarration])
     else:
         echo_info("No narration")
 
+    # Tag.
     tags = [tag] if tag is not None else []
 
     transaction = Transaction(
@@ -237,19 +286,22 @@ def add_transaction(ctx, template, date, payee, narration, tag, split, dry_run):
     if "lines" in template:
         # Lines defined by template.
         total = len(template["lines"])
+
         for lineno, line in enumerate(template["lines"], start=1):
             echo_info_params("Adding line {} of {}...", [lineno, total])
-            add_linedata(handler, transaction, do_split=split, **line)
+            _add_linedata(handler, transaction, do_split=split, **line)
         if total < 2:
             # Always prompt for at least 2 lines.
             echo_info("Template provides only one line; adding second.")
-            add_linedata(handler, transaction, do_split=split)
+            _add_linedata(handler, transaction, do_split=split)
     else:
         new_line = True
         lineno = 1
+
         while new_line:
             echo_info_params("Adding line {}...", [lineno])
-            add_linedata(handler, transaction, do_split=split)
+            _add_linedata(handler, transaction, do_split=split)
+
             # Always prompt for at least 2 lines.
             if lineno >= 2:
                 new_line = click.confirm("Add another line?", default=False)
@@ -264,6 +316,43 @@ def add_transaction(ctx, template, date, payee, narration, tag, split, dry_run):
         echo_info("Committed!")
     else:
         exit_error("The transaction did not proceed.")
+
+
+@pinto.command(name="import")
+@click.argument(
+    "file", type=click.Path(exists=True, dir_okay=False, file_okay=True),
+)
+@click.pass_context
+def import_transactions(ctx, file):
+    """Import transactions."""
+    handler = ctx.ensure_object(AccountHandler)
+    transactions = handler.ingest_transactions(file)
+    count = len(transactions)
+
+    for i, transaction in enumerate(transactions, start=1):
+        echo_info_params(
+            'Handling import {}/{}: {} "{}"',
+            [
+                i,
+                count,
+                transaction.date.strftime(TRANSACTION_DATE_FORMAT),
+                transaction.payee,
+            ],
+        )
+
+        echo_info_params("{} existing line(s):", [len(transaction.postings)])
+
+        for posting in transaction.postings:
+            echo_info_params("{} {} {}", [posting.account, posting.cost, posting.units])
+
+        new_line = True
+        lineno = 2
+
+        while new_line:
+            echo_info_params("Adding line {}...", [lineno])
+            _add_linedata(handler, transaction)
+            new_line = click.confirm("Add another line?", default=False)
+            lineno += 1
 
 
 @pinto.group(name="search")
