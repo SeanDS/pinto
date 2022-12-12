@@ -1,0 +1,14 @@
+[flake8]
+
+# Ignored rules.
+ignore =
+    # Errors
+    E266  # Too many leading '#' for block comment
+    E501  # Line too long
+    E731  # Do not assign a lambda expression, use a def
+
+# Excluded directories.
+exclude =
+    .git
+    __pycache__
+    dist

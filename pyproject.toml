@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=61", "setuptools_scm[toml]>=3.4.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pinto"
+description = "A supercharged command line interface for Beancount"
+readme = "README.md"
+authors = [{name = "Sean Leavey", email = "github@attackllama.com"}]
+license = {text = "GPL-3.0-or-later"}
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+  "Natural Language :: English",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.6",
+  "Programming Language :: Python :: 3.7",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+]
+
+# Requirements.
+requires-python = ">=3.6"
+dependencies = [
+  "beancount >=2.3.0",
+  "click >=8.0.0",
+  "dateparser >=1.0.0",
+  "pyyaml >=5.3",
+  "fuzzywuzzy[speedup] >=0.18.0",
+]
+
+# Dynamic properties set by tools.
+dynamic = ["version"]
+
+[project.optional-dependencies]
+# Development.
+dev = ["black", "pre-commit", "flake8", "readme-renderer"]
+
+[project.scripts]
+pinto = "pinto.__main__:pinto"
+
+[project.urls]
+"Bug Tracker" = "https://github.com/SeanDS/pinto/issues"
+"Source Code" = "https://github.com/SeanDS/pinto"
+
+[tool.setuptools]
+license-files = ["LICENSE"]
+
+[tool.setuptools_scm]
+write_to = "pinto/_version.py"
