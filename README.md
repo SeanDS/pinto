@@ -71,9 +71,8 @@ Enter transaction date [today]:
 ```
 
 This tries to allow any sane way of defining a date, such as "2020-06-14", "yesterday",
-"last week", "3 Mar 19", etc. (even future dates, like "in 3 weeks"). It uses
-[maya](https://github.com/timofurrer/maya) as a parser. If you leave this empty, it
-assumes the current date.
+"last week", "3 Mar 19", etc. (even future dates, like "in 3 weeks"). If you leave this
+empty, it assumes the current date.
 
 Next up you're asked for the payee:
 ```

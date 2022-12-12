@@ -1,9 +1,10 @@
 """CLI tools"""
 
 import sys
+import locale
 from itertools import zip_longest
 import click
-import maya
+import dateparser
 from .tools import DegenerateChoiceException
 
 
@@ -70,15 +71,27 @@ def get_valid_string(cur, msg, minlen=1, force_once=False, allow_empty=False):
 
 def get_valid_date(date, msg="Enter transaction date"):
     dateval = date
+
+    settings = {"DATE_ORDER": "DMY"}
+    # There is no default DATE_ORDER setting in English locales; in such cases
+    # dateparser unfortunately defaults to MDY date order, which only applies to one
+    # particular English locale (see
+    # https://en.wikipedia.org/wiki/Date_format_by_country). We set the default to DMY,
+    # and only revert to MDY if the locale is en_US.
+    lang, _ = locale.getlocale()
+    if lang == "en_US":
+        settings = {"DATE_ORDER": "MDY"}
+
     while True:
         try:
             if dateval is None:
                 dateval = click.prompt(msg, default="today")
-            date = maya.when(dateval).datetime().date()
+            date = dateparser.parse(dateval, settings=settings).date()
         except ValueError:
             continue
         else:
             break
+
     return date
 
 
