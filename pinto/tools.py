@@ -2,8 +2,11 @@
 
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from functools import cached_property
+import locale
+import dateparser
 import yaml
-from fuzzywuzzy import process
+from thefuzz import process
 from beancount.loader import load_file
 from beancount.core import data
 from beancount.parser import printer
@@ -30,16 +33,6 @@ class TemplateFileNotSet(ValueError):
 
 class TemplateNotFoundError(ValueError):
     """Template name not found."""
-
-
-class DegenerateChoiceException(ValueError):
-    def __init__(self, *args, search=None, matches=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.search = search
-        self.matches = matches
-
-    def closest_matches(self, count=5):
-        return [match for match, _ in self.matches[:count]]
 
 
 class AccountHandler:
@@ -127,60 +120,37 @@ class AccountHandler:
 
         return _fuzzy_match(payees, search_term=search_term, **kwargs)
 
-    def unique_payee(self, search, **kwargs):
-        matches = list(self.search_payees(search, **kwargs))
-
-        if len(matches) == 1:
-            return matches[0][0]
-
-        # Check if exact match exists.
-        if search is not None:
-            lsearch = search.strip().lower()
-
-            for match in matches:
-                string = match[0]
-
-                if lsearch == string.strip().lower():
-                    return string
-
-        raise DegenerateChoiceException(
-            f"Non-unique payee '{search}'", search=search, matches=matches
-        )
-
-    @property
+    @cached_property
     def accounts(self):
         entries, _, _ = load_file(str(self.accounts_file))
+        out = []
 
         for entry in entries:
             if not isinstance(entry, data.Open):
                 continue
 
-            yield entry
+            out.append(entry)
 
-    def search_accounts(self, search_term=None, accounts=None, **kwargs):
-        if accounts is None:
-            accounts = [account.account for account in self.accounts]
+        return out
 
-        return _fuzzy_match(accounts, search_term=search_term, **kwargs)
+    @cached_property
+    def payees(self):
+        return set(
+            [
+                transaction.payee
+                for transaction in self.transactions
+                if transaction.payee
+            ]
+        )
 
-    def unique_account(self, search, **kwargs):
-        matches = list(self.search_accounts(search, **kwargs))
-
-        if len(matches) == 1:
-            return matches[0][0]
-
-        # Check if exact match exists.
-        if search is not None:
-            lsearch = search.strip().lower()
-
-            for match in matches:
-                string = match[0]
-
-                if lsearch == string.strip().lower():
-                    return string
-
-        raise DegenerateChoiceException(
-            f"Non-unique account '{search}'", search=search, matches=matches
+    @cached_property
+    def narrations(self):
+        return set(
+            [
+                transaction.narration
+                for transaction in self.transactions
+                if transaction.narration
+            ]
         )
 
     def add_entry(self, transaction):
@@ -292,3 +262,69 @@ class AccountHandler:
             )
 
         return extract_from_file(path, importers.pop())
+
+    def parse_date(self, datestr):
+        settings = {"DATE_ORDER": "DMY"}
+        # There is no default DATE_ORDER setting in English locales; in such cases
+        # dateparser unfortunately defaults to MDY date order, which only applies to one
+        # particular English locale (see
+        # https://en.wikipedia.org/wiki/Date_format_by_country). We set the default to DMY,
+        # and only revert to MDY if the locale is en_US.
+        lang, _ = locale.getlocale()
+        if lang == "en_US":
+            settings = {"DATE_ORDER": "MDY"}
+
+        try:
+            return dateparser.parse(datestr, settings=settings)
+        except ValueError:
+            raise ValueError("invalid date")
+
+    def valid_date(self, datestr):
+        try:
+            datestr = self.parse_date(datestr)
+        except ValueError:
+            return False
+        else:
+            return datestr is not None
+
+    def valid_account(self, account):
+        return account in [account.account for account in self.accounts]
+
+    def parse_payment(self, payment):
+        try:
+            value, currency = payment.split()
+            value = float(value)
+        except ValueError:
+            raise ValueError("Invalid format; must be '<value> <currency>'.")
+
+        return value, currency
+
+    def valid_payment(self, payment, allow_empty=True):
+        if payment is None or payment == "":
+            return allow_empty
+
+        try:
+            self.parse_payment(payment)
+        except ValueError:
+            return False
+
+        return True
+
+    def parse_fraction(self, fraction):
+        try:
+            fraction = float(fraction)
+        except (ValueError, TypeError):
+            raise ValueError("Invalid fraction")
+
+        if not -1 <= fraction <= 1:
+            raise ValueError("Fraction must be between -1 and 1")
+
+        return fraction
+
+    def valid_fraction(self, fraction):
+        try:
+            self.parse_fraction(fraction)
+        except ValueError:
+            return False
+
+        return True
