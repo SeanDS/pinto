@@ -310,8 +310,10 @@ def add_transaction(
                 # Narration is to be empty.
                 tnarration = None
             else:
-                # No information; need to ask.
-                tnarration = narration_prompt(handler)
+                # No information; need to ask. Generate suggestions based on the payee,
+                # or, failing that, use all previous narrations.
+                suggestions = handler.filter_narrations(payee=tpayee)
+                tnarration = narration_prompt(handler, suggestions=suggestions)
 
     if tnarration:
         echo_info_params("Narration will be {}", [tnarration])

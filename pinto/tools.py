@@ -153,6 +153,22 @@ class AccountHandler:
             ]
         )
 
+    def filter_narrations(self, payee=None, **kwargs):
+        """Filter narrations from existing transactions using other transaction
+        metadata."""
+        if payee is not None:
+            narrations = set(
+                [
+                    transaction.narration
+                    for transaction in self.transactions
+                    if transaction.narration and transaction.payee == payee
+                ]
+            )
+        else:
+            narrations = self.narrations
+
+        return narrations
+
     def add_entry(self, transaction):
         from shutil import copyfile
 
