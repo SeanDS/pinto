@@ -35,7 +35,7 @@ dynamic = ["version"]
 
 [project.optional-dependencies]
 # Development.
-dev = ["black", "pre-commit", "flake8", "readme-renderer"]
+dev = ["black", "pre-commit", "flake8"]
 
 [project.scripts]
 pinto = "pinto.__main__:pinto"

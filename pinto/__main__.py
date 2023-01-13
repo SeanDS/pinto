@@ -16,7 +16,7 @@ from .prompts import (
     payee_prompt,
     narration_prompt,
     payment_prompt,
-    split_fraction_prompt,
+    split_prompt,
 )
 from .tools import (
     ACCOUNT_DIR_ENVVAR,
@@ -47,7 +47,11 @@ def _add_linedata(
         account = None
     else:
         suggestions = None
-        account = account[0]
+
+        if len(account) == 1:
+            account = account[0]
+        else:
+            account = None
 
     taccount = account_prompt(
         handler,
@@ -102,14 +106,24 @@ def _add_linedata(
 
 
 def _add_splitdata(
-    handler, transaction, taccount, tvalue, tcurrency, account=None, value=-0.5
+    handler,
+    transaction,
+    taccount,
+    tvalue,
+    tcurrency,
+    account=None,
+    value=-0.5,
+    prompt_value=True,
 ):
-    saccount = account_prompt(
-        handler, account, message=f"Choose split account for {taccount}: "
-    )
+    saccount = account_prompt(handler, account, message="Choose split account: ")
     echo_info_params("Split account will be {}", [saccount])
-    fraction = split_fraction_prompt(handler, fraction=value)
-    svalue = tvalue * fraction
+
+    if prompt_value:
+        svalue = split_prompt(handler, tvalue, tcurrency, value)
+    else:
+        svalue = handler.parse_split(value, tvalue, tcurrency)
+        echo_info_params("Split will be {}", [value])
+
     # Convert values to rounded strings.
     trvalue = f"{round(tvalue, 2):.2f}"
     srvalue = f"{round(svalue, 2):.2f}"
@@ -125,12 +139,12 @@ def _add_splitdata(
             transaction, account=saccount, number=srvalue, currency=tcurrency
         )
     else:
-        echo_info("Zero value split ignored")
+        echo_warning("Zero value split ignored")
 
 
 def _ensure_list(item):
     """Ensure `item` is a list. If it's a string, it's converted into a 1-item list."""
-    if item is None:
+    if item is None or item is False:
         item = []
     elif isinstance(item, str):
         item = [item]
@@ -248,21 +262,19 @@ def add_transaction(
                 )
     else:
         if template_payees:
-            # The first template payee is special.
-            default_payee, *other_payees = template_payees
-
             if len(template_payees) == 1 and not force_prompts:
                 # Use the only template payee without prompting.
-                tpayee = default_payee
+                tpayee = template_payees[0]
             else:
-                # Prompt, but set the default to be the first (possibly only) template
-                # payee.
-                tpayee = payee_prompt(
-                    handler, payee=default_payee, suggestions=other_payees
-                )
+                # Prompt with the template payees as suggestions.
+                tpayee = payee_prompt(handler, suggestions=template_payees)
         else:
-            # No information; need to ask.
-            tpayee = payee_prompt(handler)
+            if template.get("payee") is False:
+                # Payee is to be empty.
+                tpayee = None
+            else:
+                # No information; need to ask.
+                tpayee = payee_prompt(handler)
 
     if tpayee:
         echo_info_params("Payee will be {}", [tpayee])
@@ -287,21 +299,19 @@ def add_transaction(
                 )
     else:
         if template_narrations:
-            # The first template narration is special.
-            default_narration, *other_narrations = template_narrations
-
             if len(template_narrations) == 1 and not force_prompts:
                 # Use the only template payee without prompting.
-                tnarration = default_narration
+                tnarration = template_narrations[0]
             else:
-                # Prompt, but set the default to be the first (possibly only) template
-                # payee.
-                tnarration = narration_prompt(
-                    handler, narration=default_narration, suggestions=other_narrations
-                )
+                # Prompt with the template narrations as suggestions.
+                tnarration = narration_prompt(handler, suggestions=template_narrations)
         else:
-            # No information; need to ask.
-            tnarration = narration_prompt(handler)
+            if template.get("narration") is False:
+                # Narration is to be empty.
+                tnarration = None
+            else:
+                # No information; need to ask.
+                tnarration = narration_prompt(handler)
 
     if tnarration:
         echo_info_params("Narration will be {}", [tnarration])
@@ -358,10 +368,10 @@ def add_transaction(
     echo_info("Draft transaction:")
     echo_info(serialise_entry(transaction), bold=True)
 
-    if click.confirm("Commit?", default=True):
+    if click.confirm("Save?", default=True):
         if not dry_run:
             handler.add_entry(transaction)
-        echo_info("Committed!")
+        echo_info("Saved!")
     else:
         exit_error("The transaction did not proceed.")
 

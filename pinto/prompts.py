@@ -17,7 +17,7 @@ _ACCOUNT_CACHE = _CACHE_DIR / "account"
 _PAYEE_CACHE = _CACHE_DIR / "payee"
 _NARRATION_CACHE = _CACHE_DIR / "narration"
 _PAYMENT_CACHE = _CACHE_DIR / "payment"
-_FRACTION_CACHE = _CACHE_DIR / "fraction"
+_SPLIT_CACHE = _CACHE_DIR / "split"
 
 # Create cache files if necessary.
 for cache in [_DATE_CACHE, _ACCOUNT_CACHE]:
@@ -140,29 +140,35 @@ def payment_prompt(handler, payment=None, message="Enter value: ", **kwargs):
     return handler.parse_payment(payment)
 
 
-def split_fraction_prompt(
-    handler, fraction=None, message="Choose split fraction: ", **kwargs
+def split_prompt(
+    handler,
+    total,
+    total_currency,
+    default=None,
+    message="Choose split (fraction or amount with currency): ",
+    **kwargs
 ):
-    if fraction is None:
-        fraction = ""
+    if default is None:
+        default = ""
+    else:
+        default = str(default)
+        assert handler.valid_split(default)
 
-    fraction_validator = ThreadedValidator(
-        Validator.from_callable(
-            handler.valid_fraction, error_message="Invalid fraction"
-        )
+    split_validator = ThreadedValidator(
+        Validator.from_callable(handler.valid_split, error_message="Invalid split")
     )
 
     session = PromptSession(
         message=message,
-        history=FileHistory(_FRACTION_CACHE),
-        placeholder="e.g. -0.5",
-        validator=fraction_validator,
+        history=FileHistory(_SPLIT_CACHE),
+        placeholder="e.g. -0.5 or 1.23 USD",
+        validator=split_validator,
         validate_while_typing=True,
         **kwargs
     )
 
-    fraction = session.prompt(default=str(fraction), accept_default=False, **kwargs)
-    return handler.parse_fraction(fraction)
+    split = session.prompt(default=default, accept_default=False, **kwargs)
+    return handler.parse_split(split, total=total, total_currency=total_currency)
 
 
 class LevenshteinDistanceCompleter(Completer, metaclass=abc.ABCMeta):

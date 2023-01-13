@@ -290,7 +290,10 @@ class AccountHandler:
     def valid_account(self, account):
         return account in [account.account for account in self.accounts]
 
-    def parse_payment(self, payment):
+    def parse_payment(self, payment, allow_empty=True):
+        if payment == "" and allow_empty:
+            return None, None
+
         try:
             value, currency = payment.split()
             value = float(value)
@@ -328,3 +331,24 @@ class AccountHandler:
             return False
 
         return True
+
+    def parse_split(self, split, total, total_currency):
+        try:
+            return self.parse_fraction(split) * total
+        except ValueError:
+            try:
+                amount, currency = self.parse_payment(split)
+            except ValueError:
+                raise ValueError("Invalid split")
+
+            if currency != total_currency:
+                raise ValueError(
+                    f"Currency must be {repr(total_currency)} (got {repr(currency)})"
+                )
+
+            return amount
+
+    def valid_split(self, split):
+        return self.valid_fraction(split) or self.valid_payment(
+            split, allow_empty=False
+        )
