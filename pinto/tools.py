@@ -3,6 +3,7 @@
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from functools import cached_property
+from collections import Counter
 import locale
 import dateparser
 import yaml
@@ -16,11 +17,17 @@ TRANSACTION_DATE_FORMAT = "%Y-%m-%d"
 TRANSACTION_DATE_LONG_FORMAT = "%a %d %b %Y"
 
 
-def _fuzzy_match(candidates, search_term=None, limit=None):
+def fuzzy_match(candidates, search_term=None, limit=None):
     if search_term is None:
         return [(candidate, 1) for candidate in list(candidates)[:limit]]
 
     return process.extract(search_term, candidates, limit=limit)
+
+
+def ranked_set(items):
+    """Get set of `items` ranked in descending order of number of appearances."""
+    counts = Counter(items)
+    return sorted(counts, key=counts.get, reverse=True)
 
 
 def serialise_entry(entry):
@@ -69,13 +76,57 @@ class AccountHandler:
     def importers_config_path(self):
         return self.accounts_path / "importers.py"
 
-    @property
+    @cached_property
     def transactions(self):
         """All transactions found at the account path."""
         entries, _, _ = load_file(self.accounts_file)
-        yield from data.filter_txns(entries)
+        return tuple(data.filter_txns(entries))
 
-    @property
+    def filter_transactions(self, payee=None, narration=None):
+        """Filter transactions by their metadata.
+
+        Transactions must match all non-None parameters.
+        """
+        for transaction in self.transactions:
+            if payee is not None and transaction.payee != payee:
+                continue
+
+            if narration is not None and transaction.narration != narration:
+                continue
+
+            yield transaction
+
+    def filter_narrations(self, **kwargs):
+        """Get narrations for transactions by transaction metadata."""
+        return ranked_set(
+            transaction.narration
+            for transaction in self.filter_transactions(**kwargs)
+            if transaction.narration
+        )
+
+    def filter_accounts(self, lineno=None, **kwargs):
+        """Get accounts for transactions by transaction metadata.
+
+        Parameters
+        ----------
+        lineno : int, optional
+            Posting line number (1-indexed) of the filtered transaction to get. If None,
+            all postings are returned.
+        """
+        accounts = []
+
+        for transaction in self.filter_transactions(**kwargs):
+            postings = transaction.postings
+
+            if lineno is not None:
+                postings = [postings[lineno - 1]]
+
+            for posting in postings:
+                accounts.append(posting.account)
+
+        return ranked_set(accounts)
+
+    @cached_property
     def templates(self):
         if self.template_path is None:
             raise TemplateFileNotSet
@@ -85,11 +136,8 @@ class AccountHandler:
 
         return templates
 
-    def search_templates(self, search_term=None, templates=None, **kwargs):
-        if templates is None:
-            templates = self.templates.keys()
-
-        return _fuzzy_match(templates, search_term=search_term, **kwargs)
+    def search_templates(self, search_term=None, **kwargs):
+        return fuzzy_match(self.templates.keys(), search_term=search_term, **kwargs)
 
     def get_template(self, label):
         try:
@@ -108,17 +156,8 @@ class AccountHandler:
             return False
         return True
 
-    def search_payees(self, search_term=None, payees=None, **kwargs):
-        if payees is None:
-            payees = set(
-                [
-                    transaction.payee
-                    for transaction in self.transactions
-                    if transaction.payee
-                ]
-            )
-
-        return _fuzzy_match(payees, search_term=search_term, **kwargs)
+    def search_payees(self, search_term=None, **kwargs):
+        return fuzzy_match(self.payees, search_term=search_term, **kwargs)
 
     @cached_property
     def accounts(self):
@@ -129,7 +168,7 @@ class AccountHandler:
             if not isinstance(entry, data.Open):
                 continue
 
-            out.append(entry)
+            out.append(entry.account)
 
         return out
 
@@ -152,22 +191,6 @@ class AccountHandler:
                 if transaction.narration
             ]
         )
-
-    def filter_narrations(self, payee=None, **kwargs):
-        """Filter narrations from existing transactions using other transaction
-        metadata."""
-        if payee is not None:
-            narrations = set(
-                [
-                    transaction.narration
-                    for transaction in self.transactions
-                    if transaction.narration and transaction.payee == payee
-                ]
-            )
-        else:
-            narrations = self.narrations
-
-        return narrations
 
     def add_entry(self, transaction):
         from shutil import copyfile
@@ -304,7 +327,7 @@ class AccountHandler:
             return datestr is not None
 
     def valid_account(self, account):
-        return account in [account.account for account in self.accounts]
+        return account in self.accounts
 
     def parse_payment(self, payment, allow_empty=True):
         if payment == "" and allow_empty:

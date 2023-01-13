@@ -31,6 +31,7 @@ from .tools import (
 
 def _add_linedata(
     handler,
+    lineno,
     transaction,
     account=None,
     value=None,
@@ -41,13 +42,16 @@ def _add_linedata(
 ):
     """Validate/prompt user for linedata."""
     account = _ensure_list(account)
+
+    # Look up any previous accounts used matching this payee.
+    suggestions = handler.filter_accounts(lineno=lineno, payee=transaction.payee)
+
     if len(account) > 1:
-        # There are multiple accounts to chose from. Provide these as suggestions.
-        suggestions = account
+        # There are multiple accounts to chose from. Provide these as the first
+        # suggestions.
+        suggestions = [account, *suggestions]
         account = None
     else:
-        suggestions = None
-
         if len(account) == 1:
             account = account[0]
         else:
@@ -339,6 +343,7 @@ def add_transaction(
             echo_info_params("Adding line {} of {}...", [lineno, total])
             _add_linedata(
                 handler,
+                lineno,
                 transaction,
                 do_split=split,
                 force_prompts=force_prompts,
@@ -349,7 +354,7 @@ def add_transaction(
             # Always prompt for at least 2 lines.
             echo_info("Template provides only one line; adding second.")
             _add_linedata(
-                handler, transaction, do_split=split, force_prompts=force_prompts
+                handler, 2, transaction, do_split=split, force_prompts=force_prompts
             )
     else:
         new_line = True
@@ -358,7 +363,11 @@ def add_transaction(
         while new_line:
             echo_info_params("Adding line {}...", [lineno])
             _add_linedata(
-                handler, transaction, do_split=split, force_prompts=force_prompts
+                handler,
+                lineno,
+                transaction,
+                do_split=split,
+                force_prompts=force_prompts,
             )
 
             # Always prompt for at least 2 lines.
@@ -411,7 +420,7 @@ def import_transactions(ctx, file):
 
         while new_line:
             echo_info_params("Adding line {}...", [lineno])
-            _add_linedata(handler, transaction)
+            _add_linedata(handler, lineno, transaction)
             new_line = click.confirm("Add another line?", default=False)
             lineno += 1
 

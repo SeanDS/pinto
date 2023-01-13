@@ -199,7 +199,7 @@ class LevenshteinDistanceCompleter(Completer, metaclass=abc.ABCMeta):
 
         # Full search.
         for possibility, _ in process.extract(
-            document.text_before_cursor, self.possibilities, limit=20
+            document.text_before_cursor, self.possibilities, limit=10
         ):
             yield Completion(
                 possibility, start_position=-len(document.text_before_cursor)
@@ -209,7 +209,7 @@ class LevenshteinDistanceCompleter(Completer, metaclass=abc.ABCMeta):
 class AccountCompleter(LevenshteinDistanceCompleter):
     @property
     def possibilities(self):
-        return [account.account for account in self.handler.accounts]
+        return self.handler.accounts
 
 
 class PayeeCompleter(LevenshteinDistanceCompleter):
