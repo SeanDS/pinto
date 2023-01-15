@@ -49,7 +49,7 @@ def _add_linedata(
     if len(account) > 1:
         # There are multiple accounts to chose from. Provide these as the first
         # suggestions.
-        suggestions = [account, *suggestions]
+        suggestions = [*account, *suggestions]
         account = None
     else:
         if len(account) == 1:
