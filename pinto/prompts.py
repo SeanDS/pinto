@@ -122,7 +122,7 @@ def payment_prompt(handler, payment=None, message="Enter value: ", **kwargs):
 
     payment_validator = ThreadedValidator(
         Validator.from_callable(
-            handler.valid_payment,
+            handler.valid_payment_expression,
             error_message="Invalid format; must be '<value> <currency>'",
         )
     )

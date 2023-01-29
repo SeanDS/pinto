@@ -34,6 +34,40 @@ def serialise_entry(entry):
     return printer.format_entry(entry)
 
 
+def simple_eval(expression):
+    """Evaluate simple expression.
+
+    Based on https://stackoverflow.com/a/9558001.
+    """
+    import ast
+    import operator
+
+    # Supported operators.
+    operators = {
+        ast.Add: operator.add,
+        ast.Sub: operator.sub,
+        ast.Mult: operator.mul,
+        ast.Div: operator.truediv,
+        ast.UAdd: operator.pos,
+        ast.USub: operator.neg,
+    }
+
+    def _eval(node):
+        if isinstance(node, ast.Num):
+            # <number>
+            return node.n
+        elif isinstance(node, ast.BinOp):
+            # <expression> <operator> <expression>
+            return operators[type(node.op)](_eval(node.left), _eval(node.right))
+        elif isinstance(node, ast.UnaryOp):
+            # <operator> <expression>
+            return operators[type(node.op)](_eval(node.operand))
+
+        raise SyntaxError(node)
+
+    return _eval(ast.parse(expression, mode="eval").body)
+
+
 class TemplateFileNotSet(ValueError):
     """Template file not set."""
 
@@ -329,19 +363,24 @@ class AccountHandler:
     def valid_account(self, account):
         return account in self.accounts
 
-    def parse_payment(self, payment, allow_empty=True):
+    def parse_payment(self, payment, allow_empty=True, allow_expressions=True):
         if payment == "" and allow_empty:
             return None, None
 
         try:
             value, currency = payment.split()
-            value = float(value)
-        except ValueError:
+
+            if allow_expressions:
+                # Evaluate value.
+                value = simple_eval(value)
+            else:
+                value = float(value)
+        except (ValueError, SyntaxError):
             raise ValueError("Invalid format; must be '<value> <currency>'.")
 
         return value, currency
 
-    def valid_payment(self, payment, allow_empty=True):
+    def valid_payment_expression(self, payment, allow_empty=True):
         if payment is None or payment == "":
             return allow_empty
 
