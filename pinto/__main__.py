@@ -59,6 +59,7 @@ def _add_linedata(
 
     taccount = account_prompt(
         handler,
+        f"line-{lineno}",
         account=account,
         suggestions=suggestions,
         placeholder=None,  # Placeholder doesn't make sense in this case.
@@ -119,7 +120,9 @@ def _add_splitdata(
     value=-0.5,
     prompt_value=True,
 ):
-    saccount = account_prompt(handler, account, message="Choose split account: ")
+    saccount = account_prompt(
+        handler, "split", account, message="Choose split account: "
+    )
     echo_info_params("Split account will be {}", [saccount])
 
     if prompt_value:

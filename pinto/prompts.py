@@ -12,18 +12,15 @@ from . import PROGRAM
 
 
 _CACHE_DIR = Path(user_cache_dir(PROGRAM))
-_DATE_CACHE = _CACHE_DIR / "date"
-_ACCOUNT_CACHE = _CACHE_DIR / "account"
-_PAYEE_CACHE = _CACHE_DIR / "payee"
-_NARRATION_CACHE = _CACHE_DIR / "narration"
-_PAYMENT_CACHE = _CACHE_DIR / "payment"
-_SPLIT_CACHE = _CACHE_DIR / "split"
 
-# Create cache files if necessary.
-for cache in [_DATE_CACHE, _ACCOUNT_CACHE]:
+
+def _history_cache(slug):
+    cache = _CACHE_DIR / slug
     if not cache.exists():
         cache.parent.mkdir(parents=True, exist_ok=True)
         cache.touch()
+
+    return FileHistory(cache)
 
 
 def date_prompt(handler, dateval=None, message="Enter date: ", **kwargs):
@@ -37,11 +34,11 @@ def date_prompt(handler, dateval=None, message="Enter date: ", **kwargs):
 
     session = PromptSession(
         message=message,
-        history=FileHistory(_DATE_CACHE),
+        history=_history_cache("date"),
         validator=date_validator,
         validate_while_typing=True,
         placeholder="e.g. 12th Dec",
-        **kwargs
+        **kwargs,
     )
 
     dateval = session.prompt(default=dateval, accept_default=True)
@@ -50,11 +47,12 @@ def date_prompt(handler, dateval=None, message="Enter date: ", **kwargs):
 
 def account_prompt(
     handler,
+    slug,
     account=None,
     suggestions=None,
     message="Enter account: ",
     placeholder="e.g. Expenses:Groceries",
-    **kwargs
+    **kwargs,
 ):
     if account is None:
         account = ""
@@ -65,14 +63,14 @@ def account_prompt(
 
     session = PromptSession(
         message=message,
-        history=FileHistory(_ACCOUNT_CACHE),
+        history=_history_cache(f"account-{slug}"),
         validate_while_typing=True,
         validator=account_validator,
         placeholder=placeholder,
         completer=AccountCompleter(handler, suggestions),
         complete_while_typing=True,
         complete_in_thread=True,
-        **kwargs
+        **kwargs,
     )
 
     return session.prompt(default=account, accept_default=False, **kwargs)
@@ -86,12 +84,12 @@ def payee_prompt(
 
     session = PromptSession(
         message=message,
-        history=FileHistory(_PAYEE_CACHE),
+        history=_history_cache("payee"),
         placeholder="e.g. Supermarket",
         completer=PayeeCompleter(handler, suggestions),
         complete_while_typing=True,
         complete_in_thread=True,
-        **kwargs
+        **kwargs,
     )
 
     return session.prompt(default=payee, accept_default=False, **kwargs)
@@ -105,12 +103,12 @@ def narration_prompt(
 
     session = PromptSession(
         message=message,
-        history=FileHistory(_NARRATION_CACHE),
+        history=_history_cache("narration"),
         placeholder="e.g. Bus to city",
         completer=NarrationCompleter(handler, suggestions),
         complete_while_typing=True,
         complete_in_thread=True,
-        **kwargs
+        **kwargs,
     )
 
     return session.prompt(default=narration, accept_default=False, **kwargs)
@@ -129,11 +127,11 @@ def payment_prompt(handler, payment=None, message="Enter value: ", **kwargs):
 
     session = PromptSession(
         message=message,
-        history=FileHistory(_PAYMENT_CACHE),
+        history=_history_cache("payment"),
         placeholder="e.g. -1.23 EUR",
         validator=payment_validator,
         validate_while_typing=True,
-        **kwargs
+        **kwargs,
     )
 
     payment = session.prompt(default=payment, accept_default=False, **kwargs)
@@ -146,7 +144,7 @@ def split_prompt(
     total_currency,
     default=None,
     message="Choose split (fraction or amount with currency): ",
-    **kwargs
+    **kwargs,
 ):
     if default is None:
         default = ""
@@ -160,11 +158,11 @@ def split_prompt(
 
     session = PromptSession(
         message=message,
-        history=FileHistory(_SPLIT_CACHE),
+        history=_history_cache("split"),
         placeholder="e.g. -0.5 or 1.23 USD",
         validator=split_validator,
         validate_while_typing=True,
-        **kwargs
+        **kwargs,
     )
 
     split = session.prompt(default=default, accept_default=False, **kwargs)
