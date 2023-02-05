@@ -1,4 +1,4 @@
-"""Prompts."""
+"""Prompt functions."""
 
 import abc
 from pathlib import Path
@@ -24,6 +24,32 @@ def _history_cache(slug):
 
 
 def date_prompt(handler, dateval=None, message="Enter date: ", **kwargs):
+    """Prompt user for a date.
+
+    Several date formats are supported, including natural language dates like "today" or
+    "a week ago". See :meth:`.AccountHandler.parse_date` for more information.
+
+    Parameters
+    ----------
+    handler : :class:`.AccountHandler`
+        An account handler instance.
+    dateval : str, optional
+        The date to prepopulate as the user's input. If None, the initial prompt value
+        is empty.
+    message : str, optional
+        The prompt message.
+
+    Other Parameters
+    ----------------
+    **kwargs : dict, optional
+        Keyword arguments supported by :class:`prompt_toolkit.PromptSession`.
+
+    Returns
+    -------
+    :class:`datetime.date`
+        The date parsed from the user's input.
+    """
+
     # Print to empty prompt value if nothing is to be predefined.
     if dateval is None:
         dateval = ""
@@ -54,6 +80,39 @@ def account_prompt(
     placeholder="e.g. Expenses:Groceries",
     **kwargs,
 ):
+    """Prompt user for an account, suggesting similar previously used accounts during
+    input.
+
+    Parameters
+    ----------
+    handler : :class:`.AccountHandler`
+        An account handler instance.
+    slug : str
+        An internal identifier for the account type. This is used for caching and to
+        provide history lookup from the same prompts in previous sessions.
+    account : str, optional
+        The account to prepopulate as the user's input. If None, the initial prompt
+        value is empty.
+    suggestions : sequence, optional
+        Accounts to suggest to the user before they provide input. Note: once any input
+        has been provided by the user, the provided suggestions are based only on that
+        input.
+    message : str, optional
+        The prompt message.
+    placeholder : str, optional
+        The placeholder to show when no input has been provided.
+
+    Other Parameters
+    ----------------
+    **kwargs : dict, optional
+        Keyword arguments supported by :class:`prompt_toolkit.PromptSession`.
+
+    Returns
+    -------
+    str
+        The account provided by the user.
+    """
+
     if account is None:
         account = ""
 
@@ -79,6 +138,33 @@ def account_prompt(
 def payee_prompt(
     handler, payee=None, suggestions=None, message="Enter payee: ", **kwargs
 ):
+    """Prompt user for a payee, suggesting similar previously used payees during input.
+
+    Parameters
+    ----------
+    handler : :class:`.AccountHandler`
+        An account handler instance.
+    payee : str, optional
+        The payee to prepopulate as the user's input. If None, the initial prompt value
+        is empty.
+    suggestions : sequence, optional
+        Payees to suggest to the user before they provide input. Note: once any input
+        has been provided by the user, the provided suggestions are based only on that
+        input.
+    message : str, optional
+        The prompt message.
+
+    Other Parameters
+    ----------------
+    **kwargs : dict, optional
+        Keyword arguments supported by :class:`prompt_toolkit.PromptSession`.
+
+    Returns
+    -------
+    str
+        The payee provided by the user.
+    """
+
     if payee is None:
         payee = ""
 
@@ -98,6 +184,34 @@ def payee_prompt(
 def narration_prompt(
     handler, narration=None, suggestions=None, message="Enter narration: ", **kwargs
 ):
+    """Prompt user for a narration, suggesting similar previously used narrations during
+    input.
+
+    Parameters
+    ----------
+    handler : :class:`.AccountHandler`
+        An account handler instance.
+    narration : str, optional
+        The narration to prepopulate as the user's input. If None, the initial prompt
+        value is empty.
+    suggestions : sequence, optional
+        Narrations to suggest to the user before they provide input. Note: once any
+        input has been provided by the user, the provided suggestions are based only on
+        that input.
+    message : str, optional
+        The prompt message.
+
+    Other Parameters
+    ----------------
+    **kwargs : dict, optional
+        Keyword arguments supported by :class:`prompt_toolkit.PromptSession`.
+
+    Returns
+    -------
+    str
+        The narration provided by the user.
+    """
+
     if narration is None:
         narration = ""
 
@@ -115,6 +229,33 @@ def narration_prompt(
 
 
 def payment_prompt(handler, payment=None, message="Enter value: ", **kwargs):
+    """Prompt user for a payment.
+
+    The user's input is expected to be in the form `<value> <currency>`. The value may
+    be a quantity such as `-0.49` or an expression such as `21.87/2`. Expressions are
+    evaluated before being returned.
+
+    Parameters
+    ----------
+    handler : :class:`.AccountHandler`
+        An account handler instance.
+    payment : str, optional
+        The payment to prepopulate as the user's input. If None, the initial prompt
+        value is empty.
+    message : str, optional
+        The prompt message.
+
+    Other Parameters
+    ----------------
+    **kwargs : dict, optional
+        Keyword arguments supported by :class:`prompt_toolkit.PromptSession`.
+
+    Returns
+    -------
+    str
+        The payment parsed from the user's input.
+    """
+
     if payment is None:
         payment = ""
 
@@ -146,6 +287,34 @@ def split_prompt(
     message="Choose split (fraction or amount with currency): ",
     **kwargs,
 ):
+    """Prompt user for a split value or fraction.
+
+    Parameters
+    ----------
+    handler : :class:`.AccountHandler`
+        An account handler instance.
+    total : float
+        The total value to split.
+    total_currency : str
+        The currency associated with the total.
+    default : str, optional
+        The default split value to prepopulate as the user's input. If None, the initial
+        prompt value is empty.
+    message : str, optional
+        The prompt message.
+
+    Other Parameters
+    ----------------
+    **kwargs : dict, optional
+        Keyword arguments supported by :class:`prompt_toolkit.PromptSession`.
+
+    Returns
+    -------
+    float
+        The split value parsed from the user's input. Note: the currency is assumed to
+        be identical to `total_currency`.
+    """
+
     if default is None:
         default = ""
     else:
@@ -170,10 +339,10 @@ def split_prompt(
 
 
 class LevenshteinDistanceCompleter(Completer, metaclass=abc.ABCMeta):
-    """Completer that uses Levenshtein Distance to compute matches
+    """Completer that uses Levenshtein Distance to compute matches.
 
-    This completer offers better (e.g. typo-forgiving) matching over prompt_toolkit's
-    FuzzyCompleter.
+    This completer offers better (e.g. typo-forgiving) matching over
+    :class:`prompt_toolkit.completion.FuzzyCompleter`.
     """
 
     def __init__(self, handler, suggestions=None):
@@ -205,18 +374,24 @@ class LevenshteinDistanceCompleter(Completer, metaclass=abc.ABCMeta):
 
 
 class AccountCompleter(LevenshteinDistanceCompleter):
+    """Account completer."""
+
     @property
     def possibilities(self):
         return self.handler.accounts
 
 
 class PayeeCompleter(LevenshteinDistanceCompleter):
+    """Payee completer."""
+
     @property
     def possibilities(self):
         return self.handler.payees
 
 
 class NarrationCompleter(LevenshteinDistanceCompleter):
+    """Narration completer."""
+
     @property
     def possibilities(self):
         return self.handler.narrations

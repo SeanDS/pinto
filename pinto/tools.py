@@ -17,24 +17,25 @@ TRANSACTION_DATE_FORMAT = "%Y-%m-%d"
 TRANSACTION_DATE_LONG_FORMAT = "%a %d %b %Y"
 
 
-def fuzzy_match(candidates, search_term=None, limit=None):
+def _fuzzy_match(candidates, search_term=None, limit=None):
     if search_term is None:
         return [(candidate, 1) for candidate in list(candidates)[:limit]]
 
     return process.extract(search_term, candidates, limit=limit)
 
 
-def ranked_set(items):
+def _ranked_set(items):
     """Get set of `items` ranked in descending order of number of appearances."""
     counts = Counter(items)
     return sorted(counts, key=counts.get, reverse=True)
 
 
-def serialise_entry(entry):
+def serialize_entry(entry):
+    """Serialize a beancount entry."""
     return printer.format_entry(entry)
 
 
-def simple_eval(expression):
+def _simple_eval(expression):
     """Evaluate simple expression.
 
     Based on https://stackoverflow.com/a/9558001.
@@ -68,15 +69,13 @@ def simple_eval(expression):
     return _eval(ast.parse(expression, mode="eval").body)
 
 
-class TemplateFileNotSet(ValueError):
-    """Template file not set."""
-
-
-class TemplateNotFoundError(ValueError):
-    """Template name not found."""
-
-
 class AccountHandler:
+    """User account handler.
+
+    This class is responsible for reading from and writing to the user's beancount
+    account files and for parsing user input.
+    """
+
     def __init__(self):
         self._accounts_path = None
 
@@ -132,7 +131,7 @@ class AccountHandler:
 
     def filter_narrations(self, **kwargs):
         """Get narrations for transactions by transaction metadata."""
-        return ranked_set(
+        return _ranked_set(
             transaction.narration
             for transaction in self.filter_transactions(**kwargs)
             if transaction.narration
@@ -158,26 +157,23 @@ class AccountHandler:
             for posting in postings:
                 accounts.append(posting.account)
 
-        return ranked_set(accounts)
+        return _ranked_set(accounts)
 
     @cached_property
     def templates(self):
-        if self.template_path is None:
-            raise TemplateFileNotSet
-
         with self.template_path.open() as templatefile:
             templates = yaml.safe_load(templatefile)
 
         return templates
 
     def search_templates(self, search_term=None, **kwargs):
-        return fuzzy_match(self.templates.keys(), search_term=search_term, **kwargs)
+        return _fuzzy_match(self.templates.keys(), search_term=search_term, **kwargs)
 
     def get_template(self, label):
         try:
             template = self.templates[label]
         except KeyError as e:
-            raise TemplateNotFoundError("Template not found") from e
+            raise ValueError("Template not found") from e
 
         template["label"] = label
 
@@ -191,7 +187,7 @@ class AccountHandler:
         return True
 
     def search_payees(self, search_term=None, **kwargs):
-        return fuzzy_match(self.payees, search_term=search_term, **kwargs)
+        return _fuzzy_match(self.payees, search_term=search_term, **kwargs)
 
     @cached_property
     def accounts(self):
@@ -241,7 +237,7 @@ class AccountHandler:
                 lineno += 1
 
             # Insert the new entry.
-            destination.file.write(serialise_entry(transaction))
+            destination.file.write(serialize_entry(transaction))
 
             # Write the rest in chunks.
             while True:
@@ -267,7 +263,7 @@ class AccountHandler:
 
         # Transaction should go on the last line of the file.
         last_txn_start = existing_transaction.meta["lineno"]
-        entry = serialise_entry(existing_transaction)
+        entry = serialize_entry(existing_transaction)
         return last_txn_start + len(entry.splitlines())
 
     def check_syntax(self):
@@ -372,7 +368,7 @@ class AccountHandler:
 
             if allow_expressions:
                 # Evaluate value.
-                value = simple_eval(value)
+                value = _simple_eval(value)
             else:
                 value = float(value)
         except (ValueError, SyntaxError):

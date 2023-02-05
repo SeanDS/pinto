@@ -25,7 +25,7 @@ from .tools import (
     AccountHandler,
     TemplateNotFoundError,
     TemplateFileNotSet,
-    serialise_entry,
+    serialize_entry,
 )
 
 
@@ -380,7 +380,7 @@ def add_transaction(
 
     echo_info()
     echo_info("Draft transaction:")
-    echo_info(serialise_entry(transaction), bold=True)
+    echo_info(serialize_entry(transaction), bold=True)
 
     if click.confirm("Save?", default=True):
         if not dry_run:
