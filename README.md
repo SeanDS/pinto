@@ -5,29 +5,26 @@
 
 Supercharged command line interface for [Beancount](http://furius.ca/beancount/).
 
-While Beancount provides a few basic utilities for creating transactions via importers
-(such as a bank statement importer), it does not provide a mechanism to automatically
-insert them into your existing account. Instead, it writes these transactions to a
-separate file and the intention is that the user must manually copy those transactions
-into their own account file. This manual operation is necessary because Beancount does
-not place constraints on how the account file might be organised. For example, the
-account file might be a single flat file, or a master file with a hierarchy of
-imported subfiles. Beancount cannot know for sure where these transactions should go,
-so it leaves it to you.
+While Beancount provides importers to automate the creation of postings, it
+does not provide a mechanism to automatically insert them into existing Beancount files.
+This is because Beancount does not constrain the way the user organises their account
+files. Some users might define a master file with a hierarchy of imported subfiles,
+while others might instead use a single file for everything. Beancount cannot know for
+sure where to place a posting, so its import utilities just print parsed postings to
+standard output and leave the copying and pasting to the user.
 
-Pinto constrains the way in which the Beancount account files must be organised and in
-doing so provides the ability for reliable automatic transaction insertion. The main
-feature of Pinto is to use this constrained account file organisation to provide some
-tools to further automate your accounting.
+Pinto constrains the way in which the Beancount files must be organised and by doing so
+provides the ability to insert transactions into the right location automatically. This
+allows users to further automate their plain text accounting.
 
-The main new tool is `pinto add` which provides an interactive way to add new
-transactions to your account. This is particularly useful for those who fully track cash
-expenses, where the data cannot be scraped from a bank statement. The tool provides
-flags to auto-populate transaction files like payees, accounts, tags and dates, and also
-provides a YAML-based template mechanism to auto-populate entries involving
-frequent payees.
+The primary feature of `pinto` is `pinto add`, an interactive command line interface to
+add new transactions to your account based on a series of prompts. This is particularly
+useful for those who fully track cash expenses, where the data cannot be scraped from a
+bank statement. The tool supports command line flags to auto-populate posting metadata
+like payees, accounts, tags and dates, and also provides a YAML-based template
+mechanism to auto-populate metadata for frequently repeated postings.
 
-Other tools added to the `pinto` command are:
+Other commands available in `pinto` are:
 
 * `search`, a way to search your transactions for previously used accounts, payees and
   templates;
@@ -51,7 +48,7 @@ The `main.beancount` file should use the `include` command to include the conten
 `transactions.beancount`.
 
 The `templates.yaml` file is where you can specify templates for commonly used
-transactions, useful for `pinto add`.
+transactions; this is used by `pinto add`.
 
 To avoid excessive typing, you should define an environment variable in your shell
 called `PINTO_DIR` pointing to the directory containing your accounts.
