@@ -12,10 +12,6 @@ from beancount.loader import load_file
 from beancount.core import data
 from beancount.parser import printer
 
-ACCOUNT_DIR_ENVVAR = "PINTO_DIR"
-TRANSACTION_DATE_FORMAT = "%Y-%m-%d"
-TRANSACTION_DATE_LONG_FORMAT = "%a %d %b %Y"
-
 
 def _fuzzy_match(candidates, search_term=None, limit=None):
     if search_term is None:
@@ -69,12 +65,22 @@ def _simple_eval(expression):
     return _eval(ast.parse(expression, mode="eval").body)
 
 
+class TemplateNotFoundError(ValueError):
+    """Error denoting that the specified template does not exist."""
+
+
+class TemplateFileNotFoundError(FileNotFoundError):
+    """Error denoting that the template file does not exist or cannot be read."""
+
+
 class AccountHandler:
     """User account handler.
 
     This class is responsible for reading from and writing to the user's beancount
     account files and for parsing user input.
     """
+
+    TRANSACTION_DATE_FORMAT = "%x (%a)"
 
     def __init__(self):
         self._accounts_path = None
@@ -87,13 +93,32 @@ class AccountHandler:
     def accounts_path(self, path):
         self._accounts_path = Path(path)
 
-    @property
+    @cached_property
     def accounts_file(self):
-        return self.accounts_path / "main.beancount"
+        base = self.accounts_path / "main"
 
-    @property
+        for extension in (".beancount", ".bean"):
+            accounts = base.with_suffix(extension)
+            if accounts.is_file():
+                return accounts
+
+        raise FileNotFoundError(
+            f"Could not find main.beancount or main.bean in {self.accounts_path}."
+        )
+
+    @cached_property
     def transactions_file(self):
-        return self.accounts_path / "transactions.beancount"
+        base = self.accounts_path / "transactions"
+
+        for extension in (".beancount", ".bean"):
+            accounts = base.with_suffix(extension)
+            if accounts.is_file():
+                return accounts
+
+        raise FileNotFoundError(
+            f"Could not find transactions.beancount or transactions.bean in "
+            f"{self.accounts_path}."
+        )
 
     @property
     def transaction_backup_file(self):
@@ -102,7 +127,7 @@ class AccountHandler:
         )
 
     @property
-    def template_path(self):
+    def template_file(self):
         return self.accounts_path / "templates.yaml"
 
     @property
@@ -161,8 +186,13 @@ class AccountHandler:
 
     @cached_property
     def templates(self):
-        with self.template_path.open() as templatefile:
-            templates = yaml.safe_load(templatefile)
+        try:
+            with self.template_file.open() as templatefile:
+                templates = yaml.safe_load(templatefile)
+        except FileNotFoundError:
+            raise TemplateFileNotFoundError(
+                f"Templates file at {self.template_file} not found or not readable"
+            )
 
         return templates
 
@@ -173,7 +203,7 @@ class AccountHandler:
         try:
             template = self.templates[label]
         except KeyError as e:
-            raise ValueError("Template not found") from e
+            raise TemplateNotFoundError(f"Template {repr(label)} not found") from e
 
         template["label"] = label
 
@@ -284,22 +314,19 @@ class AccountHandler:
     def check_date_order(self):
         """Check the transactions are correctly ordered by date."""
         errors = []
-        last_lineno = None
-        last_date = None
+        last_valid_date = None
 
-        for transaction in self.transactions:
+        # Loop over transactions in line order.
+        for transaction in sorted(self.transactions, key=lambda t: t.meta["lineno"]):
             lineno = transaction.meta["lineno"]
             date = transaction.date
 
-            if last_lineno is not None and lineno < last_lineno:
+            if last_valid_date is not None and date < last_valid_date:
                 errors.append(
-                    f"Entry on line {lineno} of {self.transactions_file!s}: "
-                    f"{date} < {last_date}"
+                    f"Line {lineno} of {self.transactions_file}: {date} out of place"
                 )
-
-            last_lineno = lineno
-            last_date = date
-
+            else:
+                last_valid_date = date
         if errors:
             raise ValueError("\n".join(errors))
 
@@ -337,8 +364,8 @@ class AccountHandler:
         # There is no default DATE_ORDER setting in English locales; in such cases
         # dateparser unfortunately defaults to MDY date order, which only applies to one
         # particular English locale (see
-        # https://en.wikipedia.org/wiki/Date_format_by_country). We set the default to DMY,
-        # and only revert to MDY if the locale is en_US.
+        # https://en.wikipedia.org/wiki/Date_format_by_country). We set the default to
+        # DMY, and only revert to MDY if the locale is en_US.
         lang, _ = locale.getlocale()
         if lang == "en_US":
             settings = {"DATE_ORDER": "MDY"}

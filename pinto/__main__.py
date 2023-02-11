@@ -1,5 +1,7 @@
 """Pinto CLI"""
 
+import os
+from pathlib import Path
 import click
 from beancount.core.data import Transaction, new_metadata, create_simple_posting
 from . import __version__, PROGRAM
@@ -19,12 +21,8 @@ from .prompts import (
     split_prompt,
 )
 from .tools import (
-    ACCOUNT_DIR_ENVVAR,
-    TRANSACTION_DATE_FORMAT,
-    TRANSACTION_DATE_LONG_FORMAT,
     AccountHandler,
     TemplateNotFoundError,
-    TemplateFileNotSet,
     serialize_entry,
 )
 
@@ -162,36 +160,56 @@ def _set_account_path(ctx, _, value):
     handler = ctx.ensure_object(AccountHandler)
 
     if value is None:
-        exit_error(
-            f"--accounts or environment variable {ACCOUNT_DIR_ENVVAR} "
-            "must not be empty."
-        )
+        # No --accounts flag, so next check PINTO_DIR environment variable.
+        if value := os.getenv("PINTO_DIR"):
+            value = Path(value)
+
+            # Check directory is writeable.
+            if not os.access(value, os.W_OK):
+                exit_error(
+                    f"Invalid value for PINTO_DIR: directory {value} is not writeable."
+                )
+        else:
+            # No PINTO_DIR, so check BEANCOUNT_FILE.
+            if value := os.getenv("BEANCOUNT_FILE"):
+                # Assume the parent directory is correct.
+                value = Path(value).parent
+
+                # Check directory is writeable.
+                if not os.access(value, os.W_OK):
+                    exit_error(
+                        f"Invalid value for BEANCOUNT_FILE: parent directory {value} "
+                        f"is not writeable."
+                    )
+
+        # Can't determine correct directory.
+        if value is None:
+            exit_error(
+                "One of --accounts or environment variables PINTO_DIR or "
+                "BEANCOUNT_FILE must be specified."
+            )
 
     handler.accounts_path = value
 
 
-@click.group(name="pinto", help="Beancount tools.")
-@click.option(
+account_option = click.option(
     "--accounts",
     type=click.Path(exists=True, dir_okay=True, file_okay=False, writable=True),
-    envvar=ACCOUNT_DIR_ENVVAR,
     callback=_set_account_path,
     expose_value=False,
     help=(
-        f"Accounts directory. If not specified, the environment variable "
-        f"{ACCOUNT_DIR_ENVVAR} is searched."
+        "Accounts directory. If not specified, the environment variables PINTO_DIR "
+        "then BEANCOUNT_FILE are searched."
     ),
 )
+
+
+@click.group(name="pinto", help="Beancount tools.")
+@account_option
 @click.version_option(version=__version__, prog_name=PROGRAM)
 @click.pass_context
 def pinto(ctx):
-    handler = ctx.ensure_object(AccountHandler)
-
-    if handler.accounts_path is None:
-        exit_error(
-            f"Accounts path not found. Either --accounts or the environment variable "
-            f"{ACCOUNT_DIR_ENVVAR} must be set."
-        )
+    pass
 
 
 @pinto.command(name="add")
@@ -221,6 +239,7 @@ def pinto(ctx):
 @click.option(
     "--dry-run", is_flag=True, default=False, help="Make no changes to files."
 )
+@account_option
 @click.pass_context
 def add_transaction(
     ctx, template, date, payee, narration, tag, split, force_prompts, dry_run
@@ -231,8 +250,8 @@ def add_transaction(
     if template is not None:
         try:
             template = handler.get_template(template)
-        except TemplateNotFoundError:
-            exit_error(f"Template '{template}' not found")
+        except TemplateNotFoundError as e:
+            exit_error(e.message)
     else:
         template = {}
 
@@ -244,12 +263,7 @@ def add_transaction(
     # Date.
     tdate = date_prompt(handler, template.get("date", date), "Enter transaction date: ")
     echo_info_params(
-        "Date will be {} ({})",
-        [
-            tdate.strftime(TRANSACTION_DATE_FORMAT),
-            tdate.strftime(TRANSACTION_DATE_LONG_FORMAT),
-        ],
-        nl=False,
+        "Date will be {}", [tdate.strftime(handler.TRANSACTION_DATE_FORMAT)], nl=False
     )
 
     # Payee.
@@ -395,6 +409,7 @@ def add_transaction(
     "file",
     type=click.Path(exists=True, dir_okay=False, file_okay=True),
 )
+@account_option
 @click.pass_context
 def import_transactions(ctx, file):
     """Import transactions."""
@@ -408,7 +423,7 @@ def import_transactions(ctx, file):
             [
                 i,
                 count,
-                transaction.date.strftime(TRANSACTION_DATE_FORMAT),
+                transaction.date.strftime(handler.TRANSACTION_DATE_FORMAT),
                 transaction.payee,
             ],
         )
@@ -426,73 +441,6 @@ def import_transactions(ctx, file):
             _add_linedata(handler, lineno, transaction)
             new_line = click.confirm("Add another line?", default=False)
             lineno += 1
-
-
-@pinto.group(name="search")
-def search():
-    """Search account files."""
-    pass
-
-
-@search.command(name="templates")
-@click.argument("search", type=str)
-@click.option(
-    "-n", type=int, default=5, help="Maximum number of partial matches to return."
-)
-@click.pass_context
-def search_templates(ctx, search, n):
-    """Search templates.
-
-    Partial matches are made automatically. The search term is case-insensitive.
-    """
-    handler = ctx.ensure_object(AccountHandler)
-
-    try:
-        found = handler.search_templates(search, limit=n)
-    except TemplateFileNotSet:
-        exit_error(
-            f"Templates file path not found. Ensure there is a 'templates.yaml' file "
-            f"in {str(handler.accounts_dir.resolve())}."
-        )
-
-    for template, _ in found:
-        click.secho(template, fg="green")
-
-
-@search.command(name="accounts")
-@click.argument("search", type=str)
-@click.option(
-    "-n", type=int, default=5, help="Maximum number of partial matches to return."
-)
-@click.pass_context
-def search_accounts(ctx, search, n):
-    """Search accounts.
-
-    Partial matches are made automatically. The search term is case-insensitive.
-    """
-    handler = ctx.ensure_object(AccountHandler)
-    found = handler.search_accounts(search, limit=n)
-
-    for account, _ in found:
-        click.secho(account, fg="green")
-
-
-@search.command(name="payees")
-@click.argument("search", type=str)
-@click.option(
-    "-n", type=int, default=5, help="Maximum number of partial matches to return."
-)
-@click.pass_context
-def search_payees(ctx, search, n):
-    """Search payees.
-
-    Partial matches are made automatically. The search term is case-insensitive.
-    """
-    handler = ctx.ensure_object(AccountHandler)
-    found = handler.search_payees(search, limit=n)
-
-    for payee, _ in found:
-        click.secho(payee, fg="green")
 
 
 @pinto.group(name="format")
@@ -519,6 +467,7 @@ def format():
     show_default=True,
     help="Backup transactions before formatting.",
 )
+@account_option
 @click.pass_context
 def format_transactions(ctx, prefix_width, currency_column, backup):
     """Format transaction file."""
@@ -537,6 +486,7 @@ def check():
 
 
 @check.command(name="syntax")
+@account_option
 @click.pass_context
 def check_syntax(ctx):
     """Check account syntax is correct."""
@@ -549,6 +499,7 @@ def check_syntax(ctx):
 
 
 @check.command(name="transaction-dates")
+@account_option
 @click.pass_context
 def check_transaction_dates(ctx):
     """Check transactions are correctly ordered by date."""

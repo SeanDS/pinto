@@ -63,7 +63,7 @@ def date_prompt(handler, dateval=None, message="Enter date: ", **kwargs):
         history=_history_cache("date"),
         validator=date_validator,
         validate_while_typing=True,
-        placeholder="e.g. 12th Dec",
+        placeholder="e.g. today",
         **kwargs,
     )
 
