@@ -1,6 +1,7 @@
 """Pinto CLI"""
 
 import os
+import locale
 from pathlib import Path
 import click
 from beancount.core.data import Transaction, new_metadata, create_simple_posting
@@ -25,6 +26,10 @@ from .tools import (
     TemplateNotFoundError,
     serialize_entry,
 )
+
+
+# Tell Python to use the user's locale instead of the C locale in date formatting etc.
+locale.setlocale(locale.LC_ALL, "")
 
 
 def _add_linedata(
