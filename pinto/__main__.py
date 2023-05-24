@@ -53,6 +53,7 @@ def _add_linedata(
         # There are multiple accounts to chose from. Provide these as the first
         # suggestions.
         suggestions = [*account, *suggestions]
+        suggestions = list(dict.fromkeys(suggestions))  # Unique ordered list.
         account = None
     else:
         if len(account) == 1:
