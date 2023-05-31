@@ -450,6 +450,6 @@ class AccountHandler:
             return amount
 
     def valid_split(self, split):
-        return self.valid_fraction(split) or self.valid_payment(
+        return self.valid_fraction(split) or self.valid_payment_expression(
             split, allow_empty=False
         )
