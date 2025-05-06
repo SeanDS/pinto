@@ -15,7 +15,22 @@ standard output and leave the copying and pasting to the user.
 
 Pinto constrains the way in which the Beancount files must be organised and by doing so
 provides the ability to insert transactions into the right location automatically. This
-allows users to further automate their plain text accounting.
+allows users to further automate their plain text accounting. The minimum set of files
+Pinto expects is:
+
+```
+.
+├── main.beancount
+├── templates.yaml
+└── transactions.beancount
+```
+
+The `main.beancount` (or `main.bean`) file must be the root Beancount file that imports
+`transactions.beancount` and any other Beancount files. Pinto will not write to this
+file, but it will parse it using Beancount to determine available accounts (shown
+during prompts and used for searches). The `transactions.beancount` (or
+`transactions.bean`) file is the one
+file is 
 
 The primary feature of `pinto` is `pinto add`, an interactive command line interface to
 add new transactions to your account based on a series of prompts. This is particularly
