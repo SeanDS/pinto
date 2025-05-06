@@ -398,7 +398,7 @@ class AccountHandler:
                 value = _simple_eval(value)
             else:
                 value = float(value)
-        except (ValueError, SyntaxError):
+        except (ValueError, SyntaxError, ZeroDivisionError):
             raise ValueError("Invalid format; must be '<value> <currency>'.")
 
         return value, currency
