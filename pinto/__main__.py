@@ -517,5 +517,17 @@ def check_transaction_dates(ctx):
         exit_error(str(e))
 
 
+@pinto.command(name="edit")
+@click.pass_context
+def edit(ctx):
+    """Open transactions file in the environment's default editor."""
+    handler = ctx.ensure_object(AccountHandler)
+
+    try:
+        click.edit(filename=str(handler.transactions_file))
+    except FileNotFoundError as e:
+        exit_error(str(e))
+
+
 if __name__ == "__main__":
     pinto()
