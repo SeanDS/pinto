@@ -257,7 +257,7 @@ def add_transaction(
         try:
             template = handler.get_template(template)
         except TemplateNotFoundError as e:
-            exit_error(e.message)
+            exit_error(str(e))
     else:
         template = {}
 
